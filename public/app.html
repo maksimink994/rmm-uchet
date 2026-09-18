@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>РММ Учёт</title>
+<style>
+:root{--fs:16px;--bg:#f3f5f7;--card:#fff;--text:#20242a;--muted:#707782;--line:#dfe3e8;--accent:#3768d7;--soft:#eef3ff}
+*{box-sizing:border-box}body{margin:0;font:var(--fs)/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:8;background:var(--card);border-bottom:1px solid var(--line);padding:11px 14px}.wrap{max-width:1050px;margin:auto;padding:12px 12px 88px}
+h2,h3{margin:3px 0 10px}.meta{font-size:.82em;color:var(--muted)}.hidden{display:none!important}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px;margin-bottom:11px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--text);font:inherit}
+label{display:block;font-size:.78em;color:var(--muted);margin:0 0 4px}.btn{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:11px;padding:10px 12px;font:inherit;cursor:pointer}.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.badge,.worktag{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;background:var(--soft);font-size:.78em}.bad{background:#fde9e7;color:#9b2c22}.good{background:#e7f5ed;color:#176a43}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}.stat b{font-size:1.35em;display:block}
+.person{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:11px;margin-bottom:9px}.name{font-weight:750}.statusline{display:grid;grid-template-columns:1.1fr 1.4fr .65fr;gap:8px;margin-top:9px}
+.works{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.worktag button{border:0;background:none;color:inherit;font-weight:800;padding:0;cursor:pointer}
+.bottom{position:fixed;bottom:0;left:0;right:0;z-index:10;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr);padding:6px max(6px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px,env(safe-area-inset-left))}
+.nav{border:0;background:none;color:var(--muted);padding:9px 3px;font:inherit}.nav.on{color:var(--accent);font-weight:750}
+.tilegrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.tile{border:1px solid var(--line);border-radius:15px;padding:13px;background:var(--card);cursor:pointer}.tile.on{outline:2px solid var(--accent);background:var(--soft)}
+.personlink{cursor:pointer}.modal{position:fixed;inset:0;background:#0008;z-index:30;display:flex;align-items:flex-end;justify-content:center}.sheet{background:var(--card);width:min(700px,100%);max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px}
+.glist{display:flex;gap:6px;flex-wrap:wrap}.done{opacity:.55;text-decoration:line-through}.sectionlink{padding:13px 0;border-bottom:1px solid var(--line);cursor:pointer}.sectionlink:last-child{border:0}
+@media(max-width:650px){.statusline{grid-template-columns:1fr}.stats{gap:5px}.stat{padding:8px 4px}.tilegrid{grid-template-columns:1fr 1fr}}
+
+.person.assigned{border-left:5px solid #35a46f}.person.unassigned{border-left:5px solid #d6a51d}.person.absent{border-left:5px solid #8d96a3;opacity:.88}
+.filterbar{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.filterbar .on{background:var(--accent);color:#fff}
+@media(max-width:650px){.stats{grid-template-columns:repeat(2,1fr)}}
+.sync{font-size:.78em;color:var(--muted);margin-top:2px}.sync.ok{color:#26734d}.sync.busy{color:#8a6a19}.sync.bad{color:#a03434}
+button,input,select{touch-action:manipulation}button{min-height:42px}
+@media(max-width:560px){.wrap{padding-left:9px;padding-right:9px}.card{border-radius:18px}.stats{grid-template-columns:repeat(2,1fr)}.statusline{grid-template-columns:1fr}.bottom .nav{font-size:13px}}
+</style></head>
+<body><header><div class="row"><div class="grow"><b>РММ Учёт</b><div id="syncState" class="sync">Подключение…</div></div><button class="btn" onclick="checkDay()">Проверить день</button><button class="btn" onclick="logout()">Выйти</button></div></header>
+<div class="wrap">
+<section id="today">
+ <div class="card"><div class="grid"><div><label>Дата</label><input id="wd" type="date"></div><div><label>Поиск</label><input id="psearch" placeholder="Сотрудник / специальность"></div></div>
+ <div class="stats"><div class="stat" onclick="openDaySummary('work')" style="cursor:pointer"><b id="stWork">0</b><span class="meta">На работе</span></div><div class="stat" onclick="openDaySummary('assigned')" style="cursor:pointer"><b id="stGarage">0</b><span class="meta">Назначено</span></div><div class="stat" onclick="openDaySummary('unassigned')" style="cursor:pointer"><b id="stUnassigned">0</b><span class="meta">Не назначены</span></div><div class="stat" onclick="openDaySummary('away')" style="cursor:pointer"><b id="stAway">0</b><span class="meta">Отсутствуют</span></div></div><div class="row" style="margin-top:8px"><button class="btn" onclick="checkDay()">Проверить день</button></div></div>
+ <div id="todayList"></div>
+</section>
+
+<section id="people" class="hidden">
+ <div class="card"><div class="row"><div class="grow"><h2>Сотрудники</h2><div class="meta">Поиск, фильтр и редактирование.</div></div><button class="btn primary" onclick="openNewPerson()">+ Добавить</button></div><label style="margin-top:9px">Поиск</label><input id="peopleSearch" placeholder="Имя / специальность / телефон" oninput="renderPeople()"><div class="filterbar"><button class="btn on" data-pf="all" onclick="setPeopleFilter('all',this)">Все</button><button class="btn" data-pf="regular" onclick="setPeopleFilter('regular',this)">Постоянщики</button><button class="btn" data-pf="shift" onclick="setPeopleFilter('shift',this)">Вахтовики</button></div></div>
+ <div id="plist"></div>
+</section>
+
+<section id="reports" class="hidden">
+ <div class="card"><h2>Пятнашка</h2><div class="grid"><div><label>Месяц</label><input id="rm" type="month"></div><div><label>Период</label><select id="rh"><option value="1">1–15</option><option value="2">16–конец месяца</option></select></div></div>
+ <button class="btn primary" onclick="report()">Сформировать</button></div>
+ <div class="card"><b>Гаражные за период</b><div class="meta">После переписывания листа нажми номер — появится ✓.</div><div id="reportNav" class="glist" style="margin-top:9px"></div></div>
+ <div id="rout"></div>
+</section>
+
+<section id="more" class="hidden">
+ <div class="card"><h2>Ещё</h2>
+  <div class="sectionlink" onclick="showExtra('regulars')"><b>Постоянщики</b><div class="meta">Отдельный список постоянных сотрудников</div></div>
+  <div class="sectionlink" onclick="showExtra('shiftworkers')"><b>Вахтовики</b><div class="meta">Отдельный список вахтовых сотрудников</div></div>
+  <div class="sectionlink" onclick="showExtra('garages')"><b>Гаражные</b><div class="meta">050–5000 и нестандартные номера</div></div>
+  <div class="sectionlink" onclick="showExtra('medical')"><b>Медкомиссии</b></div><div class="sectionlink" onclick="showExtra('works')"><b>Виды работ</b><div class="meta">Добавить или отключить пункты справочника</div></div>
+  <div class="sectionlink" onclick="showExtra('settings')"><b>Настройки</b><div class="meta">Размер, оформление, резервная копия и будущие права</div></div>
+ </div>
+ <div id="extra"></div>
+</section>
+</div>
+
+<nav class="bottom"><button class="nav on" data-t="today">Сегодня</button><button class="nav" data-t="people">Сотрудники</button><button class="nav" data-t="reports">Пятнашка</button><button class="nav" data-t="more">Ещё</button></nav>
+<div id="modalHost"></div>
+
+<script>
+let db=null;
+let revision=0;
+let csrf="";
+let currentUser=null;
+let saveTimer=null;
+let saving=false;
+let saveAgain=false;
+let lastServerUpdate="";
+function freshDb(){
+  return {
+    people:[],
+    extraGarages:[],
+    days:{},
+    workTypes:DEFAULT_WORKS.map(name=>({name,active:true})),
+    settings:{fs:'16',theme:'light',density:'normal'},
+    reportDone:{}
+  };
+}
+const built=Array.from({length:4951},(_,i)=>String(i+50).padStart(3,'0'));
+const garages=()=>[...new Set([...built,...db.extraGarages])];
+const DEFAULT_WORKS=['Ремонт ДВС','Ремонт ходовой части','Смазочные работы','Подготовка к ДОПОГ','Подготовка к техосмотру','Ремонт электрооборудования','ТО-2','ШМР','Ремонт редуктора','Ремонт РКП','Ремонт КПП','Малярные работы','Токарные работы','Сварочные работы'];
+
+function activeWorks(){return db.workTypes.filter(x=>x.active).map(x=>x.name)}
+const now=()=>new Date().toISOString().slice(0,10);wd.value=now();rm.value=now().slice(0,7);
+function rec(d,id){db.days[d]??={};db.days[d][id]??={status:'',garage:'',hours:'',works:[]};return db.days[d][id]}
+function defh(p,d){let w=new Date(d+'T12:00').getDay();if(p.type==='shift')return 11;if(w===6)return 5;if(w===0)return 0;return 7}
+
+function setSync(text,kind=''){
+  const el=document.getElementById('syncState');
+  if(!el)return;
+  el.textContent=text;
+  el.className='sync '+kind;
+}
+async function api(path,options={}){
+  const r=await fetch(path,{
+    credentials:'include',
+    ...options,
+    headers:{'content-type':'application/json',...(options.headers||{})}
+  });
+  let data={}; try{data=await r.json()}catch(_){}
+  if(r.status===401){location.href='/';throw new Error('unauthorized')}
+  return {r,data};
+}
+async function loadState(first=false){
+  const me=await api('/api/me');
+  currentUser=me.data; csrf=me.data.csrf||'';
+  const x=await api('/api/state');
+  if(x.data.data===null){
+    db=freshDb(); revision=0;
+    await saveNow();
+  }else{
+    db=x.data.data||freshDb();
+    revision=Number(x.data.revision||0);
+    lastServerUpdate=x.data.updated_at||'';
+  }
+  normalizeDb();
+  if(first) renderAll();
+  setSync('Синхронизировано','ok');
+}
+function normalizeDb(){
+  db??=freshDb();
+  db.people=Array.isArray(db.people)?db.people:[];
+  /* Автоматически удаляем только старых тестовых сотрудников demo-* */
+  const demoIds=new Set(db.people.filter(p=>String(p.id||'').startsWith('demo-')).map(p=>p.id));
+  if(demoIds.size){
+    db.people=db.people.filter(p=>!demoIds.has(p.id));
+    for(const d of Object.keys(db.days||{})) for(const id of demoIds) delete db.days[d][id];
+  }
+  db.extraGarages=Array.isArray(db.extraGarages)?db.extraGarages:[];
+  db.days=db.days&&typeof db.days==='object'?db.days:{};
+  db.workTypes=Array.isArray(db.workTypes)&&db.workTypes.length?db.workTypes:DEFAULT_WORKS.map(name=>({name,active:true}));
+  db.settings=db.settings||{fs:'16',theme:'light',density:'normal'};
+  db.reportDone=db.reportDone||{};
+}
+function save(render=true){
+  normalizeDb();
+  if(render)renderAll();
+  setSync('Сохранение…','busy');
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(saveNow,220);
+}
+async function saveNow(){
+  if(!db)return;
+  if(saving){saveAgain=true;return}
+  saving=true;
+  try{
+    const x=await api('/api/state',{
+      method:'PUT',
+      headers:{'x-csrf-token':csrf},
+      body:JSON.stringify({data:db,revision})
+    });
+    if(x.r.status===409){
+      setSync('Есть новые данные — обновляю','busy');
+      const fresh=await api('/api/state');
+      db=fresh.data.data||freshDb();
+      revision=Number(fresh.data.revision||0);
+      normalizeDb(); renderAll();
+      setSync('Обновлено с сервера','ok');
+      return;
+    }
+    if(!x.r.ok)throw new Error(x.data.error||'save_failed');
+    revision=Number(x.data.revision||revision+1);
+    setSync('Сохранено','ok');
+  }catch(e){
+    if(String(e.message)!=='unauthorized') setSync('Ошибка сохранения','bad');
+  }finally{
+    saving=false;
+    if(saveAgain){saveAgain=false;saveNow()}
+  }
+}
+async function pollState(){
+  if(saving||saveTimer)return;
+  try{
+    const x=await api('/api/state');
+    const r=Number(x.data.revision||0);
+    if(r>revision){
+      db=x.data.data||freshDb();revision=r;normalizeDb();renderAll();
+      setSync('Получены изменения','ok');
+    }
+  }catch(_){}
+}
+
+document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.querySelectorAll('.wrap>section').forEach(x=>x.classList.add('hidden'));document.getElementById(b.dataset.t).classList.remove('hidden');renderAll()});
+wd.onchange=renderAll;psearch.oninput=renderToday;
+
+function statusLabel(s){return {present:'На работе',garage:'На работе',sick:'Больничный',vacation:'Отпуск',offshift:'Межвахта'}[s]||'На работе'}
+function setStatus(id,s){let r=rec(wd.value,id);r.status=s;if(['sick','vacation','offshift'].includes(s)){r.garage='';r.works=[];r.hours=''}save()}
+function setGarage(id,g){g=(g||'').trim();let r=rec(wd.value,id);if(g&&!garages().includes(g))db.extraGarages.push(g);r.garage=g;if(g){r.status='garage';if(!r.hours){let p=db.people.find(x=>x.id===id);r.hours=defh(p,wd.value)}}save()}
+function setHours(id,v){rec(wd.value,id).hours=v;save(false)}
+function addWork(id,w){if(!w)return;let r=rec(wd.value,id);r.works??=[];if(!r.works.includes(w))r.works.push(w);save()}
+function removeWork(id,w){let r=rec(wd.value,id);r.works=(r.works||[]).filter(x=>x!==w);save()}
+function garageHints(q=''){q=String(q).toLowerCase();return garages().filter(g=>!q||g.toLowerCase().includes(q)).slice(0,50).map(g=>`<option value="${g}"></option>`).join('')}
+function worksPicker(id,r){let selected=r.works||[],rem=activeWorks().filter(w=>!selected.includes(w));return `<div class="works">${selected.map(w=>`<span class="worktag">${w}<button onclick="removeWork('${id}','${w}')">×</button></span>`).join('')}</div><select style="margin-top:7px" onchange="addWork('${id}',this.value);this.value=''"><option value="">+ Добавить работу</option>${rem.map(w=>`<option>${w}</option>`).join('')}</select>`}
+
+
+function openDaySummary(kind){
+ let d=wd.value, rows=[];
+ for(let p of db.people){
+   let r=(db.days[d]||{})[p.id]||{status:'',garage:'',hours:'',works:[]};
+   let absent=['sick','vacation','offshift'].includes(r.status);
+   if(kind==='assigned' && r.garage) rows.push({p,r});
+   if(kind==='away' && absent) rows.push({p,r});if(kind==='unassigned' && !absent && !r.garage) rows.push({p,r});
+   if(kind==='work' && !absent) rows.push({p,r});
+ }
+ let title=kind==='assigned'?'Назначены сегодня':kind==='away'?'Отсутствуют сегодня':kind==='unassigned'?'Не назначены сегодня':'На работе сегодня';
+ let body=rows.map(x=>{
+   let detail=kind==='assigned'?`Гаражный №${x.r.garage}${x.r.hours?' · '+x.r.hours+' ч':''}${(x.r.works||[]).length?' · '+x.r.works.join(', '):''}`:
+              kind==='away'?statusLabel(x.r.status):
+              (x.r.garage?`Гаражный №${x.r.garage}`:'Без гаражного');
+   return `<div class="person"><b>${x.p.name}</b><div class="meta">${x.p.role||'—'}</div><div style="margin-top:4px">${detail}</div>${kind==='unassigned'?`<div class="row" style="margin-top:7px"><input list="qg-${x.p.id}" id="qi-${x.p.id}" placeholder="Гаражный №"><datalist id="qg-${x.p.id}">${garageHints('')}</datalist><button class="btn primary" onclick="quickAssign('${x.p.id}')">Назначить</button></div>`:''}</div>`
+ }).join('');
+ modalHost.innerHTML=`<div class="modal" onclick="if(event.target===this)closeModal()"><div class="sheet"><div class="row"><div class="grow"><h2>${title}</h2><div class="meta">${d} · ${rows.length} чел.</div></div><button class="btn" onclick="closeModal()">Закрыть</button></div>${body||'<div class="card meta">Список пуст</div>'}</div></div>`
+}
+
+function quickAssign(id){let e=document.getElementById('qi-'+id),g=(e?.value||'').trim();if(!g)return;setGarage(id,g);openDaySummary('unassigned')}
+function renderToday(){
+ let d=wd.value,q=psearch.value.toLowerCase(),out='',work=0,assigned=0,away=0,unassigned=0;
+ for(let p of db.people){let r=(db.days[d]||{})[p.id]||{status:'',garage:'',hours:'',works:[]};let absent=['sick','vacation','offshift'].includes(r.status);absent?away++:work++;if(r.garage)assigned++;if(!absent&&!r.garage)unassigned++;
+  if(q&&!(`${p.name} ${p.role}`.toLowerCase().includes(q)))continue;
+  out+=`<div class="person ${absent?'absent':r.garage?'assigned':'unassigned'}"><div class="row"><div class="grow"><div class="name">${p.name}</div><div class="meta">${p.role||'—'} · ${p.type==='shift'?'вахтовик':'постоянщик'}</div></div><span class="badge ${absent?'bad':'good'}">${statusLabel(r.status)}</span></div>
+  <div class="statusline"><div><label>Статус</label><select onchange="setStatus('${p.id}',this.value)"><option value="present" ${!absent?'selected':''}>На работе</option><option value="sick" ${r.status==='sick'?'selected':''}>Больничный</option><option value="vacation" ${r.status==='vacation'?'selected':''}>Отпуск</option><option value="offshift" ${r.status==='offshift'?'selected':''}>Межвахта</option></select></div>
+  <div><label>Гаражный</label><input ${absent?'disabled':''} list="g-${p.id}" value="${r.garage||''}" placeholder="Введите №" onchange="setGarage('${p.id}',this.value)"><datalist id="g-${p.id}">${garageHints(r.garage)}</datalist></div>
+  <div><label>Часы</label><input ${absent?'disabled':''} type="number" step=".5" value="${r.hours||''}" placeholder="ч" onchange="setHours('${p.id}',this.value)"></div></div>
+  ${!absent&&r.garage?worksPicker(p.id,r):''}</div>`
+ }
+ todayList.innerHTML=out||'<div class="card meta">Ничего не найдено</div>';stWork.textContent=work;stGarage.textContent=assigned;stUnassigned.textContent=unassigned;stAway.textContent=away
+}
+
+let peopleFilter='all';
+function setPeopleFilter(v,b){peopleFilter=v;document.querySelectorAll('[data-pf]').forEach(x=>x.classList.remove('on'));b.classList.add('on');renderPeople()}
+function renderPeople(){let q=(document.getElementById('peopleSearch')?.value||'').toLowerCase(),a=db.people.filter(p=>(peopleFilter==='all'||p.type===peopleFilter)&&(!q||(`${p.name} ${p.role||''} ${p.phone||''}`).toLowerCase().includes(q)));plist.innerHTML=a.map(p=>`<div class="person personlink" onclick="openPerson('${p.id}')"><div class="row"><div class="grow"><div class="name">${p.name}</div><div class="meta">${p.role||'—'} · ${p.type==='shift'?'вахтовик':'постоянщик'} · ${p.phone||'без телефона'}</div></div><span>›</span></div></div>`).join('')||'<div class="card meta">Ничего не найдено</div>'}
+function openNewPerson(){openPerson('new')}
+function openPerson(id){
+ let p=id==='new'?{id:'',name:'',birth:'',phone:'',role:'',type:'regular',med:''}:db.people.find(x=>x.id===id);if(!p)return;
+ modalHost.innerHTML=`<div class="modal" onclick="if(event.target===this)closeModal()"><div class="sheet"><div class="row"><div class="grow"><h2>${id==='new'?'Новый сотрудник':'Карточка сотрудника'}</h2></div><button class="btn" onclick="closeModal()">Закрыть</button></div>
+ <div class="grid"><div><label>ФИО / обозначение</label><input id="eName" value="${p.name}"></div><div><label>Специальность</label><input id="eRole" value="${p.role||''}"></div><div><label>Тип</label><select id="eType"><option value="regular" ${p.type==='regular'?'selected':''}>Постоянщик</option><option value="shift" ${p.type==='shift'?'selected':''}>Вахтовик</option></select></div><div><label>Телефон</label><input id="ePhone" value="${p.phone||''}"></div><div><label>Дата рождения</label><input id="eBirth" type="date" value="${p.birth||''}"></div><div><label>Медкомиссия до</label><input id="eMed" type="date" value="${p.med||''}"></div></div>
+ <div class="row" style="margin-top:12px"><button class="btn primary" onclick="savePerson('${id}')">Сохранить</button>${id!=='new'?`<button class="btn" onclick="deletePerson('${id}')">Удалить</button>`:''}</div></div></div>`
+}
+function closeModal(){modalHost.innerHTML=''}
+function savePerson(id){if(!eName.value.trim())return alert('Введите имя');let p=id==='new'?{id:crypto.randomUUID()}:db.people.find(x=>x.id===id);Object.assign(p,{name:eName.value.trim(),role:eRole.value.trim(),type:eType.value,phone:ePhone.value.trim(),birth:eBirth.value,med:eMed.value});if(id==='new')db.people.push(p);closeModal();save()}
+function deletePerson(id){if(confirm('Удалить сотрудника?')){db.people=db.people.filter(x=>x.id!==id);closeModal();save()}}
+
+function showExtra(kind){
+ if(kind==='regulars'){let a=db.people.filter(p=>p.type==='regular');extra.innerHTML=`<div class="card"><h2>Постоянщики</h2>${a.map(p=>`<div class="person personlink" onclick="openPerson('${p.id}')"><b>${p.name}</b><div class="meta">${p.role||'—'}</div></div>`).join('')}</div>`}
+ if(kind==='shiftworkers'){let a=db.people.filter(p=>p.type==='shift');extra.innerHTML=`<div class="card"><h2>Вахтовики</h2>${a.map(p=>`<div class="person personlink" onclick="openPerson('${p.id}')"><b>${p.name}</b><div class="meta">${p.role||'—'}</div></div>`).join('')}</div>`}
+ if(kind==='medical'){let n=now();extra.innerHTML=`<div class="card"><h2>Медкомиссии</h2>${db.people.map(p=>`<div class="person row"><div class="grow"><b>${p.name}</b><div class="meta">${p.med?'до '+p.med:'не указана'}</div></div><span class="badge ${p.med&&p.med<n?'bad':'good'}">${p.med&&p.med<n?'Просрочена':'OK'}</span></div>`).join('')}</div>`}
+ if(kind==='garages')extra.innerHTML=`<div class="card"><h2>Гаражные</h2><div class="row"><input id="newGarage" placeholder="Нестандартный номер"><button class="btn primary" onclick="addGarage()">Добавить</button></div><label style="margin-top:10px">Поиск</label><input id="garageSearch" placeholder="Например 325" oninput="renderGarageList(this.value)"><div id="garageList" class="glist" style="margin-top:9px"></div></div>`,renderGarageList('');
+ if(kind==='works')renderWorksManager()
+ if(kind==='settings')renderSettings()
+}
+function addGarage(){let x=newGarage.value.trim();if(x&&!garages().includes(x))db.extraGarages.push(x);save(false);renderGarageList(x)}
+function renderGarageList(q){let a=garages().filter(x=>!q||x.toLowerCase().includes(q.toLowerCase())).slice(0,100);garageList.innerHTML=a.map(g=>`<span class="badge">${g}</span>`).join('')}
+function renderSettings(){let s=db.settings;extra.innerHTML=`<div class="card"><h2>Настройки</h2><h3>Размер интерфейса</h3><div class="tilegrid">${[['14','Компактный'],['16','Обычный'],['18','Крупный'],['20','Очень крупный']].map(x=>`<div class="tile ${s.fs===x[0]?'on':''}" onclick="setSetting('fs','${x[0]}')"><b>${x[1]}</b></div>`).join('')}</div>
+ <h3 style="margin-top:16px">Оформление</h3><div class="tilegrid">${[['light','Светлое'],['warm','Тёплое'],['blue','Синее'],['dark','Тёмное']].map(x=>`<div class="tile ${s.theme===x[0]?'on':''}" onclick="setSetting('theme','${x[0]}')"><b>${x[1]}</b></div>`).join('')}</div></div>
+ <div class="card"><h3>Резервная копия</h3><div class="meta">Сохраняет сотрудников, назначения, часы, работы, гаражные и настройки в один файл.</div><div class="row" style="margin-top:9px"><button class="btn primary" onclick="exportBackup()">Сохранить базу</button><label class="btn">Восстановить базу<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label></div></div>
+ <div class="card"><h3>Пользователи и права 🔒</h3><div class="meta">Заготовка для онлайн-версии. Главный администратор сможет выдавать права: назначения, часы, статусы, сотрудники, отчёты, справочники. Управление администраторами и восстановление общей базы останутся у главного администратора.</div><button class="btn" disabled style="margin-top:9px">Будет доступно после подключения аккаунтов</button></div>`}
+function renderWorksManager(){extra.innerHTML=`<div class="card"><h2>Виды работ</h2><div class="meta">Отключённые не показываются при новом назначении, старые записи сохраняются.</div><div class="row" style="margin-top:9px"><input id="newWorkName" placeholder="Новый вид работ"><button class="btn primary" onclick="addWorkType()">Добавить</button></div>${db.workTypes.map((w,i)=>`<div class="person row"><div class="grow"><b>${w.name}</b><div class="meta">${w.active?'Активен':'Отключён'}</div></div><button class="btn" onclick="toggleWorkType(${i})">${w.active?'Отключить':'Включить'}</button></div>`).join('')}</div>`}
+function addWorkType(){let n=(newWorkName.value||'').trim();if(!n)return;if(!db.workTypes.some(x=>x.name.toLowerCase()===n.toLowerCase()))db.workTypes.push({name:n,active:true});save(false);renderWorksManager()}
+function toggleWorkType(i){db.workTypes[i].active=!db.workTypes[i].active;save(false);renderWorksManager()}
+function setSetting(k,v){db.settings[k]=v;save(false);applyTheme();renderSettings()}
+function applyTheme(){let s=db.settings||{};document.documentElement.style.setProperty('--fs',(s.fs||16)+'px');let sets={light:['#f3f5f7','#fff','#20242a','#707782','#dfe3e8','#3768d7','#eef3ff'],warm:['#f4efe7','#fffaf2','#29251f','#756d62','#e3d8c8','#9b6a31','#f5ead9'],blue:['#eef4fa','#fff','#172536','#687789','#d8e3ee','#2766a8','#e5f0fb'],dark:['#17191c','#23262b','#f2f3f5','#a8afb8','#3a3f46','#638df0','#30394c']};let a=sets[s.theme]||sets.light;['--bg','--card','--text','--muted','--line','--accent','--soft'].forEach((k,i)=>document.documentElement.style.setProperty(k,a[i]))}
+
+function periodData(){let [y,m]=rm.value.split('-').map(Number),s=rh.value==='1'?1:16,e=rh.value==='1'?15:new Date(y,m,0).getDate(),map={};for(let day=s;day<=e;day++){let d=`${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;for(let [pid,r] of Object.entries(db.days[d]||{})){if(r.status!=='garage'||!r.garage)continue;let p=db.people.find(x=>x.id===pid);if(!p)continue;map[r.garage]??={people:{},works:new Set};map[r.garage].people[pid]??={p,rows:[]};map[r.garage].people[pid].rows.push({d,h:Number(r.hours||defh(p,d))});(r.works||[]).forEach(w=>map[r.garage].works.add(w))}}return map}
+function doneKey(){return `${rm.value}_${rh.value}`}
+function doneList(){return db.reportDone?.[doneKey()]||[]}
+function toggleDone(g){let a=doneList();a=a.includes(g)?a.filter(x=>x!==g):[...a,g];db.reportDone[doneKey()]=a;save(false);report()}
+function report(){let map=periodData(),gs=Object.keys(map).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),done=doneList();reportNav.innerHTML=gs.map(g=>`<button class="btn ${done.includes(g)?'done':''}" onclick="toggleDone('${g}')">${done.includes(g)?'✓ ':''}${g}</button>`).join('')||'<span class="meta">Нет гаражных</span>';rout.innerHTML=gs.map(g=>`<div class="card"><h3>Гаражный №${g}</h3><div><b>Работы:</b> ${[...map[g].works].join(', ')||'не указаны'}</div>${Object.values(map[g].people).map(x=>`<div style="margin-top:10px"><b>${x.p.name}</b>${x.rows.sort((a,b)=>a.d.localeCompare(b.d)).map(z=>`<div>${z.d.slice(8,10)}.${z.d.slice(5,7)} — ${z.h} ч</div>`).join('')}<div class="meta">Итого ${x.rows.reduce((a,z)=>a+z.h,0)} ч</div></div>`).join('')}<button class="btn ${done.includes(g)?'done':''}" onclick="toggleDone('${g}')" style="margin-top:10px">${done.includes(g)?'✓ Обработано':'Отметить обработанным'}</button></div>`).join('')||'<div class="card meta">Нет данных</div>'}
+function checkDay(){let d=wd.value,a=[],h=[];for(let p of db.people){let r=(db.days[d]||{})[p.id]||{},abs=['sick','vacation','offshift'].includes(r.status);if(abs)continue;if(!r.garage)a.push(p.name);if(r.garage&&(r.hours===''||r.hours==null))h.push(p.name)}let x='';if(a.length)x+=`<div class="card"><b>На работе без гаражного: ${a.length}</b><div class="meta">${a.join(', ')}</div></div>`;if(h.length)x+=`<div class="card"><b>Назначены без часов: ${h.length}</b><div class="meta">${h.join(', ')}</div></div>`;if(!x)x='<div class="card"><b>✓ Основные данные заполнены</b></div>';modalHost.innerHTML=`<div class="modal" onclick="if(event.target===this)closeModal()"><div class="sheet"><div class="row"><div class="grow"><h2>Проверка дня</h2></div><button class="btn" onclick="closeModal()">Закрыть</button></div>${x}</div></div>`}
+function exportBackup(){let pack={app:'RMM_Uchet',version:'0.2.4',created:new Date().toISOString(),db};let blob=new Blob([JSON.stringify(pack,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='RMM_backup_'+now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function importBackup(inp){let f=inp.files&&inp.files[0];if(!f)return;let r=new FileReader();r.onload=async()=>{try{let x=JSON.parse(r.result),d=x.db||x;if(!d||!Array.isArray(d.people)||!d.days)throw 0;if(confirm('Восстановить базу? Текущие данные будут заменены.')){db=d;normalizeDb();await saveNow();renderAll();alert('База восстановлена')}}catch(e){alert('Не удалось прочитать резервную копию РММ')}};r.readAsText(f);inp.value=''}
+async function logout(){try{await api('/api/logout',{method:'POST',headers:{'x-csrf-token':csrf},body:'{}'})}catch(_){}location.href='/'}
+function renderAll(){if(!db)return;applyTheme();renderToday();renderPeople()}
+loadState(true).catch(()=>location.href='/');setInterval(pollState,5000);
+</script></body></html>
