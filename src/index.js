@@ -20,8 +20,8 @@ async function sha(s) {
     .join("");
 }
 
-async function pbkdf(password, salt, iterations = 210000) {
-  const k = await crypto.subtle.importKey(
+async function pbkdf(password, salt, iterations = 100000) {
+  const key = await crypto.subtle.importKey(
     "raw",
     enc.encode(password),
     "PBKDF2",
@@ -36,7 +36,7 @@ async function pbkdf(password, salt, iterations = 210000) {
       salt: enc.encode(salt),
       iterations,
     },
-    k,
+    key,
     256
   );
 
@@ -54,11 +54,11 @@ function cookie(req, name) {
 }
 
 async function auth(req, env) {
-  const t = cookie(req, "rmm_session");
+  const token = cookie(req, "rmm_session");
 
-  if (!t) return null;
+  if (!token) return null;
 
-  const th = await sha(t);
+  const tokenHash = await sha(token);
 
   return env.DB.prepare(`
     SELECT
@@ -67,17 +67,16 @@ async function auth(req, env) {
       u.role,
       s.csrf
     FROM sessions s
-    JOIN users u
-      ON u.id = s.user_id
+    JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ?
       AND u.active = 1
       AND s.expires_at > datetime('now')
   `)
-    .bind(th)
+    .bind(tokenHash)
     .first();
 }
 
-async function audit(env, u, a, d = "") {
+async function audit(env, user, action, details = "") {
   await env.DB.prepare(`
     INSERT INTO audit_log(
       user_id,
@@ -87,37 +86,26 @@ async function audit(env, u, a, d = "") {
     VALUES(?,?,?)
   `)
     .bind(
-      u?.id || null,
-      a,
-      d
+      user?.id || null,
+      action,
+      details
     )
     .run();
 }
 
-function secureHeaders(r) {
-  const h = new Headers(r.headers);
+function secureHeaders(response) {
+  const headers = new Headers(response.headers);
 
-  h.set(
-    "x-content-type-options",
-    "nosniff"
-  );
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("x-frame-options", "DENY");
+  headers.set("referrer-policy", "no-referrer");
 
-  h.set(
-    "x-frame-options",
-    "DENY"
-  );
-
-  h.set(
-    "referrer-policy",
-    "no-referrer"
-  );
-
-  h.set(
+  headers.set(
     "permissions-policy",
     "camera=(), microphone=(), geolocation=()"
   );
 
-  h.set(
+  headers.set(
     "content-security-policy",
     "default-src 'self'; " +
       "style-src 'self' 'unsafe-inline'; " +
@@ -126,91 +114,74 @@ function secureHeaders(r) {
       "connect-src 'self'"
   );
 
-  return new Response(r.body, {
-    status: r.status,
-    statusText: r.statusText,
-    headers: h,
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }
 
 export default {
   async fetch(req, env) {
     try {
-      const u = new URL(req.url);
-      const p = u.pathname;
+      const url = new URL(req.url);
+      const path = url.pathname;
 
-      /*
-      ============================
-      HEALTH
-      ============================
-      */
-
-      if (p === "/api/health") {
+      // Проверка сервера
+      if (path === "/api/health") {
         return json({
           ok: true,
           app: "RMM Uchet",
-          version: "0.4.1",
+          version: "0.4.2",
         });
       }
 
-      /*
-      ============================
-      ПЕРВЫЙ ЗАПУСК
-      ============================
-      */
-
+      // Первый запуск
       if (
-        p === "/api/setup" &&
+        path === "/api/setup" &&
         req.method === "POST"
       ) {
-        const n = await env.DB.prepare(`
+        const count = await env.DB.prepare(`
           SELECT COUNT(*) AS n
           FROM users
         `).first();
 
-        if (Number(n?.n || 0) > 0) {
+        if (Number(count?.n || 0) > 0) {
           return json(
-            {
-              error: "setup_done",
-            },
+            { error: "setup_done" },
             409
           );
         }
 
-        const b = await req.json();
+        const body = await req.json();
 
         const username =
-          String(b?.username || "").trim();
+          String(body?.username || "").trim();
 
         const password =
-          String(b?.password || "");
+          String(body?.password || "");
 
         if (username.length < 3) {
           return json(
-            {
-              error: "username_min_3",
-            },
+            { error: "username_min_3" },
             400
           );
         }
 
         if (password.length < 12) {
           return json(
-            {
-              error: "password_min_12",
-            },
+            { error: "password_min_12" },
             400
           );
         }
 
-        const salt =
-          crypto.randomUUID();
+        const salt = crypto.randomUUID();
 
-        const hash =
-          await pbkdf(
-            password,
-            salt
-          );
+        const hash = await pbkdf(
+          password,
+          salt,
+          100000
+        );
 
         await env.DB.prepare(`
           INSERT INTO users(
@@ -223,16 +194,12 @@ export default {
         `)
           .bind(
             username,
-            `pbkdf2$210000$${salt}$${hash}`,
+            `pbkdf2$100000$${salt}$${hash}`,
             "owner"
           )
           .run();
 
-        /*
-        Аудит не должен ломать
-        создание первого администратора.
-        */
-
+        // Ошибка журнала не должна ломать создание админа
         try {
           await audit(
             env,
@@ -240,11 +207,8 @@ export default {
             "initial_setup",
             `owner:${username}`
           );
-        } catch (auditError) {
-          console.error(
-            "Audit setup error:",
-            auditError
-          );
+        } catch (e) {
+          console.error("Audit error:", e);
         }
 
         return json({
@@ -253,94 +217,80 @@ export default {
         });
       }
 
-      /*
-      ============================
-      ВХОД
-      ============================
-      */
-
+      // Вход
       if (
-        p === "/api/login" &&
+        path === "/api/login" &&
         req.method === "POST"
       ) {
-        const b = await req.json();
+        const body = await req.json();
 
         const username =
-          String(b?.username || "").trim();
+          String(body?.username || "").trim();
 
         const password =
-          String(b?.password || "");
+          String(body?.password || "");
 
-        const row =
-          await env.DB.prepare(`
-            SELECT *
-            FROM users
-            WHERE username = ?
-              AND active = 1
-          `)
-            .bind(username)
-            .first();
+        const user = await env.DB.prepare(`
+          SELECT *
+          FROM users
+          WHERE username = ?
+            AND active = 1
+        `)
+          .bind(username)
+          .first();
 
-        if (!row) {
+        if (!user) {
           return json(
-            {
-              error: "bad_login",
-            },
+            { error: "bad_login" },
             401
           );
         }
 
         const parts =
-          String(row.password_hash || "")
-            .split("$");
+          String(user.password_hash || "").split("$");
 
         if (
           parts.length !== 4 ||
           parts[0] !== "pbkdf2"
         ) {
           return json(
-            {
-              error:
-                "invalid_password_hash",
-            },
+            { error: "invalid_password_hash" },
             500
           );
         }
 
-        const iterations =
-          Number(parts[1]);
+        const iterations = Number(parts[1]);
+        const salt = parts[2];
+        const expectedHash = parts[3];
 
-        const salt =
-          parts[2];
-
-        const want =
-          parts[3];
-
-        const got =
-          await pbkdf(
-            password,
-            salt,
-            iterations
+        if (
+          !Number.isInteger(iterations) ||
+          iterations < 1 ||
+          iterations > 100000
+        ) {
+          return json(
+            { error: "invalid_password_hash" },
+            500
           );
+        }
 
-        if (got !== want) {
+        const actualHash = await pbkdf(
+          password,
+          salt,
+          iterations
+        );
+
+        if (actualHash !== expectedHash) {
           try {
             await audit(
               env,
-              row,
+              user,
               "login_failed"
             );
-          } catch (e) {
-            console.error(
-              "Audit login failure:",
-              e
-            );
-          }
+          } catch (_) {}
 
           return json(
-            {
-              error: "bad_login",
-            },
+            { error: "bad_login" },
             401
           );
         }
@@ -349,10 +299,9 @@ export default {
           crypto.randomUUID() +
           crypto.randomUUID();
 
-        const csrf =
-          crypto.randomUUID();
+        const csrf = crypto.randomUUID();
 
-        const th =
+        const tokenHash =
           await sha(token);
 
         await env.DB.prepare(`
@@ -370,8 +319,8 @@ export default {
           )
         `)
           .bind(
-            th,
-            row.id,
+            tokenHash,
+            user.id,
             csrf
           )
           .run();
@@ -379,21 +328,16 @@ export default {
         try {
           await audit(
             env,
-            row,
+            user,
             "login"
           );
-        } catch (e) {
-          console.error(
-            "Audit login:",
-            e
-          );
-        }
+        } catch (_) {}
 
         return json(
           {
             ok: true,
-            username: row.username,
-            role: row.role,
+            username: user.username,
+            role: user.role,
             csrf,
           },
           200,
@@ -406,34 +350,21 @@ export default {
         );
       }
 
-      /*
-      ============================
-      ПРОВЕРКА АВТОРИЗАЦИИ
-      ============================
-      */
-
-      const me =
-        await auth(req, env);
+      // Всё ниже требует входа
+      const me = await auth(req, env);
 
       if (
-        p.startsWith("/api/") &&
+        path.startsWith("/api/") &&
         !me
       ) {
         return json(
-          {
-            error: "unauthorized",
-          },
+          { error: "unauthorized" },
           401
         );
       }
 
-      /*
-      ============================
-      ТЕКУЩИЙ ПОЛЬЗОВАТЕЛЬ
-      ============================
-      */
-
-      if (p === "/api/me") {
+      // Кто вошёл
+      if (path === "/api/me") {
         return json({
           username: me.username,
           role: me.role,
@@ -441,106 +372,83 @@ export default {
         });
       }
 
-      /*
-      ============================
-      ПОЛУЧИТЬ ОБЩИЕ ДАННЫЕ
-      ============================
-      */
-
+      // Получить данные приложения
       if (
-        p === "/api/state" &&
+        path === "/api/state" &&
         req.method === "GET"
       ) {
-        const r =
-          await env.DB.prepare(`
-            SELECT
-              data,
-              revision,
-              updated_at
-            FROM app_state
-            WHERE id = 1
-          `).first();
+        const row = await env.DB.prepare(`
+          SELECT
+            data,
+            revision,
+            updated_at
+          FROM app_state
+          WHERE id = 1
+        `).first();
 
-        if (!r) {
+        if (!row) {
           return json({
             data: null,
             revision: 0,
           });
         }
 
-        let parsed = null;
+        let data = null;
 
         try {
-          parsed =
-            JSON.parse(r.data);
+          data = JSON.parse(row.data);
         } catch (_) {
-          parsed = null;
+          data = null;
         }
 
         return json({
-          data: parsed,
-          revision: r.revision,
-          updated_at: r.updated_at,
+          data,
+          revision: row.revision,
+          updated_at: row.updated_at,
         });
       }
 
-      /*
-      ============================
-      СОХРАНИТЬ ОБЩИЕ ДАННЫЕ
-      ============================
-      */
-
+      // Сохранить данные приложения
       if (
-        p === "/api/state" &&
+        path === "/api/state" &&
         req.method === "PUT"
       ) {
         if (
-          req.headers.get(
-            "x-csrf-token"
-          ) !== me.csrf
+          req.headers.get("x-csrf-token") !== me.csrf
         ) {
           return json(
-            {
-              error: "csrf",
-            },
+            { error: "csrf" },
             403
           );
         }
 
-        const b =
-          await req.json();
+        const body = await req.json();
 
-        const cur =
-          await env.DB.prepare(`
-            SELECT revision
-            FROM app_state
-            WHERE id = 1
-          `).first();
+        const current = await env.DB.prepare(`
+          SELECT revision
+          FROM app_state
+          WHERE id = 1
+        `).first();
 
         if (
-          cur &&
-          Number(b.revision) !==
-            Number(cur.revision)
+          current &&
+          Number(body.revision) !==
+            Number(current.revision)
         ) {
           return json(
             {
               error: "conflict",
-              revision:
-                cur.revision,
+              revision: current.revision,
             },
             409
           );
         }
 
         const data =
-          JSON.stringify(
-            b.data
-          );
+          JSON.stringify(body.data);
 
-        const rev =
-          Number(
-            cur?.revision || 0
-          ) + 1;
+        const revision =
+          Number(current?.revision || 0) + 1;
 
         await env.DB.prepare(`
           INSERT INTO app_state(
@@ -557,16 +465,13 @@ export default {
           )
           ON CONFLICT(id)
           DO UPDATE SET
-            data =
-              excluded.data,
-            revision =
-              excluded.revision,
-            updated_at =
-              CURRENT_TIMESTAMP
+            data = excluded.data,
+            revision = excluded.revision,
+            updated_at = CURRENT_TIMESTAMP
         `)
           .bind(
             data,
-            rev
+            revision
           )
           .run();
 
@@ -575,141 +480,97 @@ export default {
             env,
             me,
             "state_saved",
-            `revision ${rev}`
+            `revision ${revision}`
           );
-        } catch (e) {
-          console.error(
-            "Audit state:",
-            e
-          );
-        }
+        } catch (_) {}
 
         return json({
           ok: true,
-          revision: rev,
+          revision,
         });
       }
 
-      /*
-      ============================
-      СПИСОК ПОЛЬЗОВАТЕЛЕЙ
-      ============================
-      */
-
+      // Список пользователей
       if (
-        p === "/api/users" &&
+        path === "/api/users" &&
         req.method === "GET"
       ) {
-        if (
-          me.role !== "owner"
-        ) {
+        if (me.role !== "owner") {
           return json(
-            {
-              error: "forbidden",
-            },
+            { error: "forbidden" },
             403
           );
         }
 
-        const r =
-          await env.DB.prepare(`
-            SELECT
-              id,
-              username,
-              role,
-              active,
-              created_at
-            FROM users
-            ORDER BY id
-          `).all();
+        const result = await env.DB.prepare(`
+          SELECT
+            id,
+            username,
+            role,
+            active,
+            created_at
+          FROM users
+          ORDER BY id
+        `).all();
 
         return json(
-          r.results || []
+          result.results || []
         );
       }
 
-      /*
-      ============================
-      СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ
-      ============================
-      */
-
+      // Создание дополнительных пользователей
       if (
-        p === "/api/users" &&
+        path === "/api/users" &&
         req.method === "POST"
       ) {
-        if (
-          me.role !== "owner"
-        ) {
+        if (me.role !== "owner") {
           return json(
-            {
-              error: "forbidden",
-            },
+            { error: "forbidden" },
             403
           );
         }
 
         if (
-          req.headers.get(
-            "x-csrf-token"
-          ) !== me.csrf
+          req.headers.get("x-csrf-token") !== me.csrf
         ) {
           return json(
-            {
-              error: "csrf",
-            },
+            { error: "csrf" },
             403
           );
         }
 
-        const b =
-          await req.json();
+        const body = await req.json();
 
         const username =
-          String(
-            b?.username || ""
-          ).trim();
+          String(body?.username || "").trim();
 
         const password =
-          String(
-            b?.password || ""
-          );
+          String(body?.password || "");
 
-        if (
-          username.length < 3
-        ) {
+        if (username.length < 3) {
           return json(
-            {
-              error:
-                "username_min_3",
-            },
+            { error: "username_min_3" },
             400
           );
         }
 
-        if (
-          password.length < 12
-        ) {
+        if (password.length < 12) {
           return json(
-            {
-              error:
-                "password_min_12",
-            },
+            { error: "password_min_12" },
             400
           );
         }
 
-        const salt =
-          crypto.randomUUID();
+        const salt = crypto.randomUUID();
 
-        const hash =
-          await pbkdf(
-            password,
-            salt
-          );
+        const hash = await pbkdf(
+          password,
+          salt,
+          100000
+        );
 
         const role =
-          b.role === "viewer"
+          body.role === "viewer"
             ? "viewer"
             : "editor";
 
@@ -720,16 +581,11 @@ export default {
             role,
             active
           )
-          VALUES(
-            ?,
-            ?,
-            ?,
-            1
-          )
+          VALUES(?,?,?,1)
         `)
           .bind(
             username,
-            `pbkdf2$210000$${salt}$${hash}`,
+            `pbkdf2$100000$${salt}$${hash}`,
             role
           )
           .run();
@@ -741,41 +597,21 @@ export default {
             "user_created",
             username
           );
-        } catch (e) {
-          console.error(
-            "Audit user:",
-            e
-          );
-        }
+        } catch (_) {}
 
         return json(
-          {
-            ok: true,
-          },
+          { ok: true },
           201
         );
       }
 
-      /*
-      ============================
-      СТАТИЧЕСКОЕ ПРИЛОЖЕНИЕ
-      ============================
-      */
-
+      // Файлы сайта
       const assetResponse =
         await env.ASSETS.fetch(req);
 
-      return secureHeaders(
-        assetResponse
-      );
+      return secureHeaders(assetResponse);
 
     } catch (e) {
-
-      /*
-      Теперь сервер НЕ скрывает
-      настоящую причину ошибки.
-      */
-
       console.error(
         "RMM SERVER ERROR:",
         e
