@@ -49,41 +49,69 @@ function cookie(req, name) {
   const m = (req.headers.get("cookie") || "").match(
     new RegExp("(?:^|; )" + name + "=([^;]*)")
   );
+
   return m ? decodeURIComponent(m[1]) : null;
 }
 
 async function auth(req, env) {
   const t = cookie(req, "rmm_session");
+
   if (!t) return null;
 
   const th = await sha(t);
 
   return env.DB.prepare(`
-    SELECT u.id,u.username,u.role,s.csrf
+    SELECT
+      u.id,
+      u.username,
+      u.role,
+      s.csrf
     FROM sessions s
-    JOIN users u ON u.id=s.user_id
-    WHERE s.token_hash=?
-      AND u.active=1
-      AND s.expires_at>datetime('now')
+    JOIN users u
+      ON u.id = s.user_id
+    WHERE s.token_hash = ?
+      AND u.active = 1
+      AND s.expires_at > datetime('now')
   `)
     .bind(th)
     .first();
 }
 
 async function audit(env, u, a, d = "") {
-  await env.DB.prepare(
-    "INSERT INTO audit_log(user_id,action,details) VALUES(?,?,?)"
-  )
-    .bind(u?.id || null, a, d)
+  await env.DB.prepare(`
+    INSERT INTO audit_log(
+      user_id,
+      action,
+      details
+    )
+    VALUES(?,?,?)
+  `)
+    .bind(
+      u?.id || null,
+      a,
+      d
+    )
     .run();
 }
 
 function secureHeaders(r) {
   const h = new Headers(r.headers);
 
-  h.set("x-content-type-options", "nosniff");
-  h.set("x-frame-options", "DENY");
-  h.set("referrer-policy", "no-referrer");
+  h.set(
+    "x-content-type-options",
+    "nosniff"
+  );
+
+  h.set(
+    "x-frame-options",
+    "DENY"
+  );
+
+  h.set(
+    "referrer-policy",
+    "no-referrer"
+  );
+
   h.set(
     "permissions-policy",
     "camera=(), microphone=(), geolocation=()"
@@ -91,7 +119,11 @@ function secureHeaders(r) {
 
   h.set(
     "content-security-policy",
-    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+    "default-src 'self'; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data:; " +
+      "connect-src 'self'"
   );
 
   return new Response(r.body, {
@@ -107,83 +139,221 @@ export default {
       const u = new URL(req.url);
       const p = u.pathname;
 
+      /*
+      ============================
+      HEALTH
+      ============================
+      */
+
       if (p === "/api/health") {
         return json({
           ok: true,
           app: "RMM Uchet",
-          version: "0.4.0",
+          version: "0.4.1",
         });
       }
 
-      if (p === "/api/setup" && req.method === "POST") {
-        const n = await env.DB.prepare(
-          "SELECT COUNT(*) n FROM users"
-        ).first();
+      /*
+      ============================
+      ПЕРВЫЙ ЗАПУСК
+      ============================
+      */
 
-        if (n.n) {
-          return json({ error: "setup_done" }, 409);
+      if (
+        p === "/api/setup" &&
+        req.method === "POST"
+      ) {
+        const n = await env.DB.prepare(`
+          SELECT COUNT(*) AS n
+          FROM users
+        `).first();
+
+        if (Number(n?.n || 0) > 0) {
+          return json(
+            {
+              error: "setup_done",
+            },
+            409
+          );
         }
 
         const b = await req.json();
 
-        if (
-          !b.username ||
-          !b.password ||
-          b.password.length < 12
-        ) {
-          return json({ error: "password_min_12" }, 400);
+        const username =
+          String(b?.username || "").trim();
+
+        const password =
+          String(b?.password || "");
+
+        if (username.length < 3) {
+          return json(
+            {
+              error: "username_min_3",
+            },
+            400
+          );
         }
 
-        const salt = crypto.randomUUID();
-        const hash = await pbkdf(b.password, salt);
+        if (password.length < 12) {
+          return json(
+            {
+              error: "password_min_12",
+            },
+            400
+          );
+        }
 
-        await env.DB.prepare(
-          "INSERT INTO users(username,password_hash,role) VALUES(?,?,?)"
-        )
+        const salt =
+          crypto.randomUUID();
+
+        const hash =
+          await pbkdf(
+            password,
+            salt
+          );
+
+        await env.DB.prepare(`
+          INSERT INTO users(
+            username,
+            password_hash,
+            role,
+            active
+          )
+          VALUES(?,?,?,1)
+        `)
           .bind(
-            b.username,
+            username,
             `pbkdf2$210000$${salt}$${hash}`,
             "owner"
           )
           .run();
 
-        await audit(env, null, "initial_setup");
+        /*
+        Аудит не должен ломать
+        создание первого администратора.
+        */
 
-        return json({ ok: true });
-      }
-
-      if (p === "/api/login" && req.method === "POST") {
-        const b = await req.json();
-
-        const row = await env.DB.prepare(
-          "SELECT * FROM users WHERE username=? AND active=1"
-        )
-          .bind(b.username || "")
-          .first();
-
-        if (!row) {
-          return json({ error: "bad_login" }, 401);
+        try {
+          await audit(
+            env,
+            null,
+            "initial_setup",
+            `owner:${username}`
+          );
+        } catch (auditError) {
+          console.error(
+            "Audit setup error:",
+            auditError
+          );
         }
 
-        const [_, it, salt, want] =
-          row.password_hash.split("$");
+        return json({
+          ok: true,
+          username,
+        });
+      }
 
-        const got = await pbkdf(
-          b.password || "",
-          salt,
-          +it
-        );
+      /*
+      ============================
+      ВХОД
+      ============================
+      */
+
+      if (
+        p === "/api/login" &&
+        req.method === "POST"
+      ) {
+        const b = await req.json();
+
+        const username =
+          String(b?.username || "").trim();
+
+        const password =
+          String(b?.password || "");
+
+        const row =
+          await env.DB.prepare(`
+            SELECT *
+            FROM users
+            WHERE username = ?
+              AND active = 1
+          `)
+            .bind(username)
+            .first();
+
+        if (!row) {
+          return json(
+            {
+              error: "bad_login",
+            },
+            401
+          );
+        }
+
+        const parts =
+          String(row.password_hash || "")
+            .split("$");
+
+        if (
+          parts.length !== 4 ||
+          parts[0] !== "pbkdf2"
+        ) {
+          return json(
+            {
+              error:
+                "invalid_password_hash",
+            },
+            500
+          );
+        }
+
+        const iterations =
+          Number(parts[1]);
+
+        const salt =
+          parts[2];
+
+        const want =
+          parts[3];
+
+        const got =
+          await pbkdf(
+            password,
+            salt,
+            iterations
+          );
 
         if (got !== want) {
-          await audit(env, row, "login_failed");
-          return json({ error: "bad_login" }, 401);
+          try {
+            await audit(
+              env,
+              row,
+              "login_failed"
+            );
+          } catch (e) {
+            console.error(
+              "Audit login failure:",
+              e
+            );
+          }
+
+          return json(
+            {
+              error: "bad_login",
+            },
+            401
+          );
         }
 
         const token =
-          crypto.randomUUID() + crypto.randomUUID();
+          crypto.randomUUID() +
+          crypto.randomUUID();
 
-        const csrf = crypto.randomUUID();
-        const th = await sha(token);
+        const csrf =
+          crypto.randomUUID();
+
+        const th =
+          await sha(token);
 
         await env.DB.prepare(`
           INSERT INTO sessions(
@@ -193,13 +363,31 @@ export default {
             expires_at
           )
           VALUES(
-            ?,?,?,datetime('now','+30 days')
+            ?,
+            ?,
+            ?,
+            datetime('now','+30 days')
           )
         `)
-          .bind(th, row.id, csrf)
+          .bind(
+            th,
+            row.id,
+            csrf
+          )
           .run();
 
-        await audit(env, row, "login");
+        try {
+          await audit(
+            env,
+            row,
+            "login"
+          );
+        } catch (e) {
+          console.error(
+            "Audit login:",
+            e
+          );
+        }
 
         return json(
           {
@@ -212,16 +400,38 @@ export default {
           {
             "set-cookie":
               `rmm_session=${encodeURIComponent(token)}; ` +
-              "HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000",
+              "HttpOnly; Secure; SameSite=Strict; " +
+              "Path=/; Max-Age=2592000",
           }
         );
       }
 
-      const me = await auth(req, env);
+      /*
+      ============================
+      ПРОВЕРКА АВТОРИЗАЦИИ
+      ============================
+      */
 
-      if (p.startsWith("/api/") && !me) {
-        return json({ error: "unauthorized" }, 401);
+      const me =
+        await auth(req, env);
+
+      if (
+        p.startsWith("/api/") &&
+        !me
+      ) {
+        return json(
+          {
+            error: "unauthorized",
+          },
+          401
+        );
       }
+
+      /*
+      ============================
+      ТЕКУЩИЙ ПОЛЬЗОВАТЕЛЬ
+      ============================
+      */
 
       if (p === "/api/me") {
         return json({
@@ -231,53 +441,106 @@ export default {
         });
       }
 
-      if (p === "/api/state" && req.method === "GET") {
-        const r = await env.DB.prepare(
-          "SELECT data,revision,updated_at FROM app_state WHERE id=1"
-        ).first();
+      /*
+      ============================
+      ПОЛУЧИТЬ ОБЩИЕ ДАННЫЕ
+      ============================
+      */
 
-        return json(
-          r
-            ? {
-                data: JSON.parse(r.data),
-                revision: r.revision,
-                updated_at: r.updated_at,
-              }
-            : {
-                data: null,
-                revision: 0,
-              }
-        );
-      }
+      if (
+        p === "/api/state" &&
+        req.method === "GET"
+      ) {
+        const r =
+          await env.DB.prepare(`
+            SELECT
+              data,
+              revision,
+              updated_at
+            FROM app_state
+            WHERE id = 1
+          `).first();
 
-      if (p === "/api/state" && req.method === "PUT") {
-        if (
-          req.headers.get("x-csrf-token") !== me.csrf
-        ) {
-          return json({ error: "csrf" }, 403);
+        if (!r) {
+          return json({
+            data: null,
+            revision: 0,
+          });
         }
 
-        const b = await req.json();
+        let parsed = null;
 
-        const cur = await env.DB.prepare(
-          "SELECT revision FROM app_state WHERE id=1"
-        ).first();
+        try {
+          parsed =
+            JSON.parse(r.data);
+        } catch (_) {
+          parsed = null;
+        }
+
+        return json({
+          data: parsed,
+          revision: r.revision,
+          updated_at: r.updated_at,
+        });
+      }
+
+      /*
+      ============================
+      СОХРАНИТЬ ОБЩИЕ ДАННЫЕ
+      ============================
+      */
+
+      if (
+        p === "/api/state" &&
+        req.method === "PUT"
+      ) {
+        if (
+          req.headers.get(
+            "x-csrf-token"
+          ) !== me.csrf
+        ) {
+          return json(
+            {
+              error: "csrf",
+            },
+            403
+          );
+        }
+
+        const b =
+          await req.json();
+
+        const cur =
+          await env.DB.prepare(`
+            SELECT revision
+            FROM app_state
+            WHERE id = 1
+          `).first();
 
         if (
           cur &&
-          b.revision !== cur.revision
+          Number(b.revision) !==
+            Number(cur.revision)
         ) {
           return json(
             {
               error: "conflict",
-              revision: cur.revision,
+              revision:
+                cur.revision,
             },
             409
           );
         }
 
-        const data = JSON.stringify(b.data);
-        const rev = (cur?.revision || 0) + 1;
+        const data =
+          JSON.stringify(
+            b.data
+          );
+
+        const rev =
+          Number(
+            cur?.revision || 0
+          ) + 1;
 
         await env.DB.prepare(`
           INSERT INTO app_state(
@@ -287,23 +550,39 @@ export default {
             updated_at
           )
           VALUES(
-            1,?,?,CURRENT_TIMESTAMP
+            1,
+            ?,
+            ?,
+            CURRENT_TIMESTAMP
           )
           ON CONFLICT(id)
           DO UPDATE SET
-            data=excluded.data,
-            revision=excluded.revision,
-            updated_at=CURRENT_TIMESTAMP
+            data =
+              excluded.data,
+            revision =
+              excluded.revision,
+            updated_at =
+              CURRENT_TIMESTAMP
         `)
-          .bind(data, rev)
+          .bind(
+            data,
+            rev
+          )
           .run();
 
-        await audit(
-          env,
-          me,
-          "state_saved",
-          `revision ${rev}`
-        );
+        try {
+          await audit(
+            env,
+            me,
+            "state_saved",
+            `revision ${rev}`
+          );
+        } catch (e) {
+          console.error(
+            "Audit state:",
+            e
+          );
+        }
 
         return json({
           ok: true,
@@ -311,80 +590,204 @@ export default {
         });
       }
 
-      if (p === "/api/users" && req.method === "GET") {
-        if (me.role !== "owner") {
-          return json({ error: "forbidden" }, 403);
+      /*
+      ============================
+      СПИСОК ПОЛЬЗОВАТЕЛЕЙ
+      ============================
+      */
+
+      if (
+        p === "/api/users" &&
+        req.method === "GET"
+      ) {
+        if (
+          me.role !== "owner"
+        ) {
+          return json(
+            {
+              error: "forbidden",
+            },
+            403
+          );
         }
 
-        const r = await env.DB.prepare(`
-          SELECT
-            id,
-            username,
-            role,
-            active,
-            created_at
-          FROM users
-          ORDER BY id
-        `).all();
+        const r =
+          await env.DB.prepare(`
+            SELECT
+              id,
+              username,
+              role,
+              active,
+              created_at
+            FROM users
+            ORDER BY id
+          `).all();
 
-        return json(r.results);
+        return json(
+          r.results || []
+        );
       }
 
-      if (p === "/api/users" && req.method === "POST") {
+      /*
+      ============================
+      СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ
+      ============================
+      */
+
+      if (
+        p === "/api/users" &&
+        req.method === "POST"
+      ) {
         if (
-          me.role !== "owner" ||
-          req.headers.get("x-csrf-token") !== me.csrf
+          me.role !== "owner"
         ) {
-          return json({ error: "forbidden" }, 403);
+          return json(
+            {
+              error: "forbidden",
+            },
+            403
+          );
         }
 
-        const b = await req.json();
-
         if (
-          !b.username ||
-          !b.password ||
-          b.password.length < 12
+          req.headers.get(
+            "x-csrf-token"
+          ) !== me.csrf
         ) {
-          return json({ error: "invalid" }, 400);
+          return json(
+            {
+              error: "csrf",
+            },
+            403
+          );
         }
 
-        const salt = crypto.randomUUID();
-        const hash = await pbkdf(
-          b.password,
-          salt
-        );
+        const b =
+          await req.json();
+
+        const username =
+          String(
+            b?.username || ""
+          ).trim();
+
+        const password =
+          String(
+            b?.password || ""
+          );
+
+        if (
+          username.length < 3
+        ) {
+          return json(
+            {
+              error:
+                "username_min_3",
+            },
+            400
+          );
+        }
+
+        if (
+          password.length < 12
+        ) {
+          return json(
+            {
+              error:
+                "password_min_12",
+            },
+            400
+          );
+        }
+
+        const salt =
+          crypto.randomUUID();
+
+        const hash =
+          await pbkdf(
+            password,
+            salt
+          );
+
+        const role =
+          b.role === "viewer"
+            ? "viewer"
+            : "editor";
 
         await env.DB.prepare(`
           INSERT INTO users(
             username,
             password_hash,
-            role
+            role,
+            active
           )
-          VALUES(?,?,?)
+          VALUES(
+            ?,
+            ?,
+            ?,
+            1
+          )
         `)
           .bind(
-            b.username,
+            username,
             `pbkdf2$210000$${salt}$${hash}`,
-            b.role === "viewer"
-              ? "viewer"
-              : "editor"
+            role
           )
           .run();
 
-        await audit(
-          env,
-          me,
-          "user_created",
-          b.username
-        );
+        try {
+          await audit(
+            env,
+            me,
+            "user_created",
+            username
+          );
+        } catch (e) {
+          console.error(
+            "Audit user:",
+            e
+          );
+        }
 
-        return json({ ok: true }, 201);
+        return json(
+          {
+            ok: true,
+          },
+          201
+        );
       }
 
-      return env.ASSETS.fetch(req);
+      /*
+      ============================
+      СТАТИЧЕСКОЕ ПРИЛОЖЕНИЕ
+      ============================
+      */
+
+      const assetResponse =
+        await env.ASSETS.fetch(req);
+
+      return secureHeaders(
+        assetResponse
+      );
+
     } catch (e) {
+
+      /*
+      Теперь сервер НЕ скрывает
+      настоящую причину ошибки.
+      */
+
+      console.error(
+        "RMM SERVER ERROR:",
+        e
+      );
+
       return json(
-        { error: "server_error" },
+        {
+          error: "server_error",
+          details: String(
+            e?.message || e
+          ),
+        },
         500
       );
     }
