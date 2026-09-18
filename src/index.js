@@ -1,0 +1,392 @@
+const enc = new TextEncoder();
+
+const json = (x, s = 200, h = {}) =>
+  new Response(JSON.stringify(x), {
+    status: s,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...h,
+    },
+  });
+
+async function sha(s) {
+  return [
+    ...new Uint8Array(
+      await crypto.subtle.digest("SHA-256", enc.encode(s))
+    ),
+  ]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function pbkdf(password, salt, iterations = 210000) {
+  const k = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: enc.encode(salt),
+      iterations,
+    },
+    k,
+    256
+  );
+
+  return [...new Uint8Array(bits)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function cookie(req, name) {
+  const m = (req.headers.get("cookie") || "").match(
+    new RegExp("(?:^|; )" + name + "=([^;]*)")
+  );
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+async function auth(req, env) {
+  const t = cookie(req, "rmm_session");
+  if (!t) return null;
+
+  const th = await sha(t);
+
+  return env.DB.prepare(`
+    SELECT u.id,u.username,u.role,s.csrf
+    FROM sessions s
+    JOIN users u ON u.id=s.user_id
+    WHERE s.token_hash=?
+      AND u.active=1
+      AND s.expires_at>datetime('now')
+  `)
+    .bind(th)
+    .first();
+}
+
+async function audit(env, u, a, d = "") {
+  await env.DB.prepare(
+    "INSERT INTO audit_log(user_id,action,details) VALUES(?,?,?)"
+  )
+    .bind(u?.id || null, a, d)
+    .run();
+}
+
+function secureHeaders(r) {
+  const h = new Headers(r.headers);
+
+  h.set("x-content-type-options", "nosniff");
+  h.set("x-frame-options", "DENY");
+  h.set("referrer-policy", "no-referrer");
+  h.set(
+    "permissions-policy",
+    "camera=(), microphone=(), geolocation=()"
+  );
+
+  h.set(
+    "content-security-policy",
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+  );
+
+  return new Response(r.body, {
+    status: r.status,
+    statusText: r.statusText,
+    headers: h,
+  });
+}
+
+export default {
+  async fetch(req, env) {
+    try {
+      const u = new URL(req.url);
+      const p = u.pathname;
+
+      if (p === "/api/health") {
+        return json({
+          ok: true,
+          app: "RMM Uchet",
+          version: "0.4.0",
+        });
+      }
+
+      if (p === "/api/setup" && req.method === "POST") {
+        const n = await env.DB.prepare(
+          "SELECT COUNT(*) n FROM users"
+        ).first();
+
+        if (n.n) {
+          return json({ error: "setup_done" }, 409);
+        }
+
+        const b = await req.json();
+
+        if (
+          !b.username ||
+          !b.password ||
+          b.password.length < 12
+        ) {
+          return json({ error: "password_min_12" }, 400);
+        }
+
+        const salt = crypto.randomUUID();
+        const hash = await pbkdf(b.password, salt);
+
+        await env.DB.prepare(
+          "INSERT INTO users(username,password_hash,role) VALUES(?,?,?)"
+        )
+          .bind(
+            b.username,
+            `pbkdf2$210000$${salt}$${hash}`,
+            "owner"
+          )
+          .run();
+
+        await audit(env, null, "initial_setup");
+
+        return json({ ok: true });
+      }
+
+      if (p === "/api/login" && req.method === "POST") {
+        const b = await req.json();
+
+        const row = await env.DB.prepare(
+          "SELECT * FROM users WHERE username=? AND active=1"
+        )
+          .bind(b.username || "")
+          .first();
+
+        if (!row) {
+          return json({ error: "bad_login" }, 401);
+        }
+
+        const [_, it, salt, want] =
+          row.password_hash.split("$");
+
+        const got = await pbkdf(
+          b.password || "",
+          salt,
+          +it
+        );
+
+        if (got !== want) {
+          await audit(env, row, "login_failed");
+          return json({ error: "bad_login" }, 401);
+        }
+
+        const token =
+          crypto.randomUUID() + crypto.randomUUID();
+
+        const csrf = crypto.randomUUID();
+        const th = await sha(token);
+
+        await env.DB.prepare(`
+          INSERT INTO sessions(
+            token_hash,
+            user_id,
+            csrf,
+            expires_at
+          )
+          VALUES(
+            ?,?,?,datetime('now','+30 days')
+          )
+        `)
+          .bind(th, row.id, csrf)
+          .run();
+
+        await audit(env, row, "login");
+
+        return json(
+          {
+            ok: true,
+            username: row.username,
+            role: row.role,
+            csrf,
+          },
+          200,
+          {
+            "set-cookie":
+              `rmm_session=${encodeURIComponent(token)}; ` +
+              "HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000",
+          }
+        );
+      }
+
+      const me = await auth(req, env);
+
+      if (p.startsWith("/api/") && !me) {
+        return json({ error: "unauthorized" }, 401);
+      }
+
+      if (p === "/api/me") {
+        return json({
+          username: me.username,
+          role: me.role,
+          csrf: me.csrf,
+        });
+      }
+
+      if (p === "/api/state" && req.method === "GET") {
+        const r = await env.DB.prepare(
+          "SELECT data,revision,updated_at FROM app_state WHERE id=1"
+        ).first();
+
+        return json(
+          r
+            ? {
+                data: JSON.parse(r.data),
+                revision: r.revision,
+                updated_at: r.updated_at,
+              }
+            : {
+                data: null,
+                revision: 0,
+              }
+        );
+      }
+
+      if (p === "/api/state" && req.method === "PUT") {
+        if (
+          req.headers.get("x-csrf-token") !== me.csrf
+        ) {
+          return json({ error: "csrf" }, 403);
+        }
+
+        const b = await req.json();
+
+        const cur = await env.DB.prepare(
+          "SELECT revision FROM app_state WHERE id=1"
+        ).first();
+
+        if (
+          cur &&
+          b.revision !== cur.revision
+        ) {
+          return json(
+            {
+              error: "conflict",
+              revision: cur.revision,
+            },
+            409
+          );
+        }
+
+        const data = JSON.stringify(b.data);
+        const rev = (cur?.revision || 0) + 1;
+
+        await env.DB.prepare(`
+          INSERT INTO app_state(
+            id,
+            data,
+            revision,
+            updated_at
+          )
+          VALUES(
+            1,?,?,CURRENT_TIMESTAMP
+          )
+          ON CONFLICT(id)
+          DO UPDATE SET
+            data=excluded.data,
+            revision=excluded.revision,
+            updated_at=CURRENT_TIMESTAMP
+        `)
+          .bind(data, rev)
+          .run();
+
+        await audit(
+          env,
+          me,
+          "state_saved",
+          `revision ${rev}`
+        );
+
+        return json({
+          ok: true,
+          revision: rev,
+        });
+      }
+
+      if (p === "/api/users" && req.method === "GET") {
+        if (me.role !== "owner") {
+          return json({ error: "forbidden" }, 403);
+        }
+
+        const r = await env.DB.prepare(`
+          SELECT
+            id,
+            username,
+            role,
+            active,
+            created_at
+          FROM users
+          ORDER BY id
+        `).all();
+
+        return json(r.results);
+      }
+
+      if (p === "/api/users" && req.method === "POST") {
+        if (
+          me.role !== "owner" ||
+          req.headers.get("x-csrf-token") !== me.csrf
+        ) {
+          return json({ error: "forbidden" }, 403);
+        }
+
+        const b = await req.json();
+
+        if (
+          !b.username ||
+          !b.password ||
+          b.password.length < 12
+        ) {
+          return json({ error: "invalid" }, 400);
+        }
+
+        const salt = crypto.randomUUID();
+        const hash = await pbkdf(
+          b.password,
+          salt
+        );
+
+        await env.DB.prepare(`
+          INSERT INTO users(
+            username,
+            password_hash,
+            role
+          )
+          VALUES(?,?,?)
+        `)
+          .bind(
+            b.username,
+            `pbkdf2$210000$${salt}$${hash}`,
+            b.role === "viewer"
+              ? "viewer"
+              : "editor"
+          )
+          .run();
+
+        await audit(
+          env,
+          me,
+          "user_created",
+          b.username
+        );
+
+        return json({ ok: true }, 201);
+      }
+
+      return env.ASSETS.fetch(req);
+    } catch (e) {
+      return json(
+        { error: "server_error" },
+        500
+      );
+    }
+  },
+};
