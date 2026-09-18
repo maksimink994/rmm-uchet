@@ -2,10 +2,11 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f5f7f6">
-  <title>РММ Учёт</title>
   <link rel="manifest" href="/manifest.json">
+
+  <title>РММ Учёт</title>
 
   <style>
     * {
@@ -14,472 +15,581 @@
 
     body {
       margin: 0;
+      min-height: 100vh;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #f5f7f6;
       color: #202522;
     }
 
-    .app {
-      max-width: 720px;
-      margin: auto;
+    .page {
       min-height: 100vh;
-      padding-bottom: 90px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 18px;
     }
 
-    header {
+    .card {
+      width: 100%;
+      max-width: 420px;
       background: white;
-      padding: 20px 18px 16px;
-      border-bottom: 1px solid #e5e9e7;
-      position: sticky;
-      top: 0;
-      z-index: 5;
+      border-radius: 24px;
+      padding: 28px 22px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.07);
+    }
+
+    .logo {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #e7f3ec;
+      font-size: 27px;
+      margin-bottom: 18px;
     }
 
     h1 {
       margin: 0;
-      font-size: 25px;
+      font-size: 28px;
     }
 
-    .date {
-      margin-top: 5px;
-      color: #6d756f;
-      font-size: 14px;
+    .subtitle {
+      margin: 7px 0 24px;
+      color: #68706b;
+      font-size: 15px;
     }
 
-    .content {
-      padding: 14px;
-    }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    .stat {
-      background: white;
-      border-radius: 16px;
-      padding: 14px;
-      border: 1px solid #e6eae8;
-    }
-
-    .stat strong {
-      display: block;
-      font-size: 24px;
-    }
-
-    .stat span {
-      color: #69716c;
-      font-size: 13px;
-    }
-
-    .search {
-      width: 100%;
-      padding: 13px 15px;
-      border: 1px solid #dfe4e1;
+    .mode {
+      background: #f1f4f2;
+      padding: 12px 14px;
       border-radius: 14px;
-      background: white;
+      margin-bottom: 20px;
+      font-size: 14px;
+      color: #4f5953;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 650;
+      margin: 15px 0 7px;
+    }
+
+    input {
+      width: 100%;
+      height: 52px;
+      border: 1px solid #d8dedb;
+      border-radius: 14px;
+      padding: 0 15px;
       font-size: 16px;
       outline: none;
-      margin-bottom: 12px;
-    }
-
-    .card {
       background: white;
-      border: 1px solid #e5e9e7;
-      border-radius: 17px;
-      padding: 14px;
-      margin-bottom: 10px;
     }
 
-    .employee {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-    }
-
-    .marker {
-      width: 11px;
-      height: 11px;
-      border-radius: 50%;
-      background: #c7ccc9;
-      flex-shrink: 0;
-    }
-
-    .marker.green {
-      background: #39a867;
-    }
-
-    .marker.yellow {
-      background: #e4b83f;
-    }
-
-    .name {
-      font-weight: 700;
-      font-size: 16px;
-    }
-
-    .role {
-      color: #737a76;
-      font-size: 13px;
-      margin-top: 2px;
-    }
-
-    .empty {
-      text-align: center;
-      padding: 50px 20px;
-      color: #747c77;
-    }
-
-    .bottom {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: white;
-      border-top: 1px solid #dfe4e1;
-      display: flex;
-      justify-content: center;
-      z-index: 10;
-    }
-
-    .bottom-inner {
-      width: 100%;
-      max-width: 720px;
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-    }
-
-    .nav {
-      padding: 13px 4px 12px;
-      text-align: center;
-      font-size: 12px;
-      color: #747b77;
-    }
-
-    .nav.active {
-      color: #177748;
-      font-weight: 700;
+    input:focus {
+      border-color: #477b61;
+      box-shadow: 0 0 0 3px rgba(71,123,97,.10);
     }
 
     button {
+      width: 100%;
+      height: 52px;
+      margin-top: 20px;
       border: 0;
-      border-radius: 13px;
-      padding: 12px 16px;
-      font-size: 15px;
-      font-weight: 600;
+      border-radius: 14px;
+      background: #477b61;
+      color: white;
+      font-size: 16px;
+      font-weight: 750;
       cursor: pointer;
     }
 
-    .primary {
-      background: #177748;
-      color: white;
+    button:disabled {
+      opacity: .55;
     }
 
-    .login {
-      padding: 30px 18px;
+    .secondary {
+      background: #eef2f0;
+      color: #344039;
+      margin-top: 10px;
     }
 
-    .login-box {
-      max-width: 420px;
-      margin: 70px auto 0;
-      background: white;
-      padding: 24px;
-      border-radius: 20px;
-      border: 1px solid #e4e8e6;
-    }
-
-    .login-box h2 {
-      margin-top: 0;
-    }
-
-    .login-box input {
-      width: 100%;
-      padding: 13px;
-      margin-bottom: 10px;
-      border-radius: 12px;
-      border: 1px solid #d8dedb;
-      font-size: 16px;
-    }
-
-    .login-box button {
-      width: 100%;
+    .message {
+      display: none;
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-radius: 13px;
+      font-size: 14px;
+      line-height: 1.4;
     }
 
     .error {
-      color: #b42318;
-      font-size: 14px;
-      margin-top: 12px;
+      display: block;
+      background: #fff0f0;
+      color: #a03434;
+    }
+
+    .success {
+      display: block;
+      background: #edf8f1;
+      color: #28633f;
+    }
+
+    .small {
+      margin-top: 18px;
+      text-align: center;
+      color: #8a918d;
+      font-size: 12px;
+    }
+
+    #loginPanel {
+      display: none;
     }
   </style>
 </head>
 
 <body>
 
-<div id="root">
-  <div class="login">
-    <div class="login-box">
-      <h2>РММ Учёт</h2>
-      <p>Вход в систему</p>
+<div class="page">
 
-      <input id="username" placeholder="Логин" autocomplete="username">
-      <input id="password" type="password" placeholder="Пароль" autocomplete="current-password">
+  <div class="card">
 
-      <button class="primary" onclick="login()">Войти</button>
+    <div class="logo">🔧</div>
 
-      <div id="error" class="error"></div>
-    </div>
-  </div>
-</div>
+    <h1>РММ Учёт</h1>
 
-<script>
-let currentState = null;
-let revision = 0;
-let csrf = "";
+    <!-- ПЕРВЫЙ ЗАПУСК -->
 
-async function api(url, options = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {})
-  };
+    <div id="setupPanel">
 
-  if (csrf) {
-    headers["X-CSRF-Token"] = csrf;
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    credentials: "same-origin"
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.error || "Ошибка");
-  }
-
-  return data;
-}
-
-async function login() {
-  const username = document.getElementById("username").value.trim();
-  const password = document.getElementById("password").value;
-  const error = document.getElementById("error");
-
-  error.textContent = "";
-
-  try {
-    const result = await api("/api/login", {
-      method: "POST",
-      body: JSON.stringify({ username, password })
-    });
-
-    csrf = result.csrf;
-
-    await loadApp();
-  } catch (e) {
-    error.textContent = "Неверный логин или пароль";
-  }
-}
-
-async function loadApp() {
-  try {
-    const me = await api("/api/me");
-    csrf = me.csrf;
-
-    const state = await api("/api/state");
-
-    revision = state.revision || 0;
-    currentState = state.data || {
-      employees: [],
-      assignments: [],
-      workTypes: []
-    };
-
-    render();
-  } catch (e) {
-    showLogin();
-  }
-}
-
-function showLogin() {
-  document.getElementById("root").innerHTML = `
-    <div class="login">
-      <div class="login-box">
-        <h2>РММ Учёт</h2>
-        <p>Вход в систему</p>
-
-        <input id="username" placeholder="Логин" autocomplete="username">
-        <input id="password" type="password" placeholder="Пароль" autocomplete="current-password">
-
-        <button class="primary" onclick="login()">Войти</button>
-
-        <div id="error" class="error"></div>
+      <div class="subtitle">
+        Первоначальная настройка системы
       </div>
-    </div>
-  `;
-}
 
-function todayISO() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+      <div class="mode">
+        Создай главного администратора. Это выполняется только один раз.
+      </div>
 
-  return `${y}-${m}-${day}`;
-}
+      <form id="setupForm">
 
-function dateText() {
-  return new Intl.DateTimeFormat("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long"
-  }).format(new Date());
-}
-
-function render() {
-  const employees = currentState.employees || [];
-  const assignments = currentState.assignments || [];
-  const today = todayISO();
-
-  const todayAssignments = assignments.filter(x => x.date === today);
-
-  const assignedIds = new Set(
-    todayAssignments
-      .filter(x => x.garage)
-      .map(x => String(x.employeeId))
-  );
-
-  const working = employees.filter(
-    x => !["Больничный", "Отпуск", "Межвахта"].includes(x.status)
-  );
-
-  const absent = employees.length - working.length;
-
-  document.getElementById("root").innerHTML = `
-    <div class="app">
-      <header>
-        <h1>Сегодня</h1>
-        <div class="date">${dateText()}</div>
-      </header>
-
-      <main class="content">
-
-        <div class="stats">
-          <div class="stat">
-            <strong>${working.length}</strong>
-            <span>На работе</span>
-          </div>
-
-          <div class="stat">
-            <strong>${assignedIds.size}</strong>
-            <span>Назначено</span>
-          </div>
-
-          <div class="stat">
-            <strong>${Math.max(0, working.length - assignedIds.size)}</strong>
-            <span>Не назначены</span>
-          </div>
-
-          <div class="stat">
-            <strong>${absent}</strong>
-            <span>Отсутствуют</span>
-          </div>
-        </div>
+        <label for="setupUsername">Логин администратора</label>
 
         <input
-          class="search"
-          id="search"
-          placeholder="Поиск сотрудника"
-          oninput="renderEmployees()"
+          id="setupUsername"
+          autocomplete="username"
+          placeholder="Например: admin"
+          required
         >
 
-        <div id="employees"></div>
-      </main>
+        <label for="setupPassword">Пароль</label>
+
+        <input
+          id="setupPassword"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Минимум 12 символов"
+          minlength="12"
+          required
+        >
+
+        <label for="setupPassword2">Повтори пароль</label>
+
+        <input
+          id="setupPassword2"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Повтори пароль"
+          minlength="12"
+          required
+        >
+
+        <button id="setupButton" type="submit">
+          Создать администратора
+        </button>
+
+      </form>
+
+      <button
+        type="button"
+        class="secondary"
+        onclick="showLogin()"
+      >
+        Администратор уже создан
+      </button>
+
+      <div id="setupMessage" class="message"></div>
+
     </div>
 
-    <nav class="bottom">
-      <div class="bottom-inner">
-        <div class="nav active">Сегодня</div>
-        <div class="nav">Сотрудники</div>
-        <div class="nav">Пятнашка</div>
-        <div class="nav">Ещё</div>
-      </div>
-    </nav>
-  `;
 
-  renderEmployees();
+    <!-- ВХОД -->
+
+    <div id="loginPanel">
+
+      <div class="subtitle">
+        Вход в систему
+      </div>
+
+      <form id="loginForm">
+
+        <label for="loginUsername">Логин</label>
+
+        <input
+          id="loginUsername"
+          autocomplete="username"
+          placeholder="Логин"
+          required
+        >
+
+        <label for="loginPassword">Пароль</label>
+
+        <input
+          id="loginPassword"
+          type="password"
+          autocomplete="current-password"
+          placeholder="Пароль"
+          required
+        >
+
+        <button id="loginButton" type="submit">
+          Войти
+        </button>
+
+      </form>
+
+      <button
+        type="button"
+        class="secondary"
+        onclick="showSetup()"
+      >
+        Первый запуск
+      </button>
+
+      <div id="loginMessage" class="message"></div>
+
+    </div>
+
+    <div class="small">
+      РММ Учёт • защищённый доступ
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+const setupPanel = document.getElementById("setupPanel");
+const loginPanel = document.getElementById("loginPanel");
+
+const setupMessage = document.getElementById("setupMessage");
+const loginMessage = document.getElementById("loginMessage");
+
+
+function showLogin() {
+
+  setupPanel.style.display = "none";
+  loginPanel.style.display = "block";
+
+  setupMessage.className = "message";
+  setupMessage.textContent = "";
+
 }
 
-function renderEmployees() {
-  const box = document.getElementById("employees");
 
-  if (!box) return;
+function showSetup() {
 
-  const q = (document.getElementById("search")?.value || "")
-    .trim()
-    .toLowerCase();
+  loginPanel.style.display = "none";
+  setupPanel.style.display = "block";
 
-  const employees = (currentState.employees || []).filter(x =>
-    (x.name || "").toLowerCase().includes(q)
-  );
+  loginMessage.className = "message";
+  loginMessage.textContent = "";
 
-  if (!employees.length) {
-    box.innerHTML = `
-      <div class="empty">
-        Сотрудников пока нет
-      </div>
-    `;
-    return;
-  }
+}
 
-  box.innerHTML = employees.map(emp => {
-    const status = emp.status || "На работе";
 
-    const assignment = (currentState.assignments || [])
-      .find(x =>
-        String(x.employeeId) === String(emp.id) &&
-        x.date === todayISO()
+function message(element, text, type) {
+
+  element.textContent = text;
+  element.className = "message " + type;
+
+}
+
+
+async function api(path, options = {}) {
+
+  const response = await fetch(path, {
+    credentials: "include",
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+
+  let data = {};
+
+  try {
+    data = await response.json();
+  } catch (_) {}
+
+  return {
+    response,
+    data
+  };
+
+}
+
+
+/* =========================
+   СОЗДАНИЕ ПЕРВОГО ADMIN
+========================= */
+
+document
+  .getElementById("setupForm")
+  .addEventListener("submit", async function(event) {
+
+    event.preventDefault();
+
+    const username =
+      document.getElementById("setupUsername").value.trim();
+
+    const password =
+      document.getElementById("setupPassword").value;
+
+    const password2 =
+      document.getElementById("setupPassword2").value;
+
+    const button =
+      document.getElementById("setupButton");
+
+
+    if (username.length < 3) {
+
+      message(
+        setupMessage,
+        "Логин должен содержать минимум 3 символа.",
+        "error"
       );
 
-    let marker = "";
-
-    if (status === "На работе") {
-      marker = assignment?.garage ? "green" : "yellow";
+      return;
     }
 
-    return `
-      <div class="card">
-        <div class="employee">
-          <div class="marker ${marker}"></div>
 
-          <div>
-            <div class="name">${escapeHtml(emp.name || "Без имени")}</div>
-            <div class="role">
-              ${escapeHtml(emp.specialty || "")}
-              ${assignment?.garage
-                ? " · гаражный " + escapeHtml(String(assignment.garage))
-                : ""}
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
+    if (password.length < 12) {
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
+      message(
+        setupMessage,
+        "Пароль должен содержать минимум 12 символов.",
+        "error"
+      );
 
-loadApp();
+      return;
+    }
+
+
+    if (password !== password2) {
+
+      message(
+        setupMessage,
+        "Пароли не совпадают.",
+        "error"
+      );
+
+      return;
+    }
+
+
+    button.disabled = true;
+    button.textContent = "Создание...";
+
+
+    try {
+
+      const { response, data } =
+        await api("/api/setup", {
+
+          method: "POST",
+
+          body: JSON.stringify({
+            username,
+            password
+          })
+
+        });
+
+
+      if (response.ok) {
+
+        message(
+          setupMessage,
+          "Администратор создан. Сейчас можно войти.",
+          "success"
+        );
+
+        document.getElementById("loginUsername").value =
+          username;
+
+        setTimeout(() => {
+
+          showLogin();
+
+          document
+            .getElementById("loginPassword")
+            .focus();
+
+        }, 800);
+
+        return;
+      }
+
+
+      const error =
+        data.error ||
+        data.message ||
+        "";
+
+
+      if (
+        response.status === 409 ||
+        error === "setup_done" ||
+        error === "already_initialized" ||
+        error === "admin_exists"
+      ) {
+
+        showLogin();
+
+        message(
+          loginMessage,
+          "Администратор уже создан. Войди в систему.",
+          "success"
+        );
+
+        return;
+      }
+
+
+      message(
+        setupMessage,
+        "Сервер отклонил создание администратора: " +
+        (error || ("HTTP " + response.status)),
+        "error"
+      );
+
+
+    } catch (error) {
+
+      message(
+        setupMessage,
+        "Нет связи с сервером.",
+        "error"
+      );
+
+    } finally {
+
+      button.disabled = false;
+      button.textContent =
+        "Создать администратора";
+
+    }
+
+  });
+
+
+/* =========================
+   ВХОД
+========================= */
+
+document
+  .getElementById("loginForm")
+  .addEventListener("submit", async function(event) {
+
+    event.preventDefault();
+
+    const username =
+      document.getElementById("loginUsername").value.trim();
+
+    const password =
+      document.getElementById("loginPassword").value;
+
+    const button =
+      document.getElementById("loginButton");
+
+
+    button.disabled = true;
+    button.textContent = "Вход...";
+
+
+    try {
+
+      const { response, data } =
+        await api("/api/login", {
+
+          method: "POST",
+
+          body: JSON.stringify({
+            username,
+            password
+          })
+
+        });
+
+
+      if (response.ok) {
+
+        message(
+          loginMessage,
+          "Вход выполнен.",
+          "success"
+        );
+
+
+        /*
+          После входа пробуем перейти
+          в основное приложение.
+        */
+
+        const destination =
+          data.redirect ||
+          data.url ||
+          "/app";
+
+
+        window.location.href = destination;
+
+        return;
+      }
+
+
+      message(
+        loginMessage,
+        data.error ||
+        data.message ||
+        "Неверный логин или пароль.",
+        "error"
+      );
+
+
+    } catch (error) {
+
+      message(
+        loginMessage,
+        "Нет связи с сервером.",
+        "error"
+      );
+
+    } finally {
+
+      button.disabled = false;
+      button.textContent = "Войти";
+
+    }
+
+  });
+
 </script>
 
 </body>
