@@ -1,108 +1,378 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f5f7f6">
-<link rel="manifest" href="/manifest.webmanifest">
-<title>РММ Учёт</title>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover"
+  >
+  <meta name="theme-color" content="#f5f7f6">
 
-<style>
-*{box-sizing:border-box}
-body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f7f6;color:#202522}
-.page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 18px}
-.card{width:100%;max-width:430px;background:#fff;border-radius:28px;padding:30px 24px;box-shadow:0 14px 44px rgba(0,0,0,.07)}
-.logo{width:62px;height:62px;border-radius:20px;display:flex;align-items:center;justify-content:center;background:#e7f3ec;font-size:29px;margin-bottom:20px}
-h1{margin:0;font-size:31px}
-.subtitle{margin:7px 0 24px;color:#68706b;font-size:16px}
-label{display:block;font-size:14px;font-weight:700;margin:16px 0 7px}
-input{width:100%;height:54px;border:1px solid #d8dedb;border-radius:15px;padding:0 15px;font-size:17px;outline:none}
-input:focus{border-color:#477b61;box-shadow:0 0 0 3px rgba(71,123,97,.1)}
-button{width:100%;height:54px;margin-top:21px;border:0;border-radius:15px;background:#477b61;color:#fff;font-size:17px;font-weight:800}
-.msg{display:none;margin-top:16px;padding:12px 14px;border-radius:13px;font-size:14px}
-.error{display:block;background:#fff0f0;color:#a03434}
-.small{margin-top:20px;text-align:center;color:#8a918d;font-size:12px}
-</style>
+  <link rel="manifest" href="/manifest.webmanifest">
+
+  <title>РММ Учёт</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      background: #f5f7f6;
+      color: #202522;
+    }
+
+    .page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 18px;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 430px;
+      background: #ffffff;
+      border-radius: 28px;
+      padding: 30px 24px;
+      box-shadow: 0 14px 44px rgba(0, 0, 0, 0.07);
+    }
+
+    .logo {
+      width: 62px;
+      height: 62px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #e7f3ec;
+      font-size: 29px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 31px;
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin: 8px 0 24px;
+      color: #68706b;
+      font-size: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      margin: 16px 0 7px;
+    }
+
+    input {
+      width: 100%;
+      height: 54px;
+      border: 1px solid #d8dedb;
+      border-radius: 15px;
+      padding: 0 15px;
+      font-size: 17px;
+      outline: none;
+      background: #ffffff;
+    }
+
+    input:focus {
+      border-color: #477b61;
+      box-shadow: 0 0 0 3px rgba(71, 123, 97, 0.1);
+    }
+
+    button {
+      width: 100%;
+      height: 54px;
+      margin-top: 21px;
+      border: 0;
+      border-radius: 15px;
+      background: #477b61;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+    }
+
+    .message {
+      display: none;
+      margin-top: 16px;
+      padding: 13px 14px;
+      border-radius: 13px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .error {
+      display: block;
+      background: #fff0f0;
+      color: #a03434;
+    }
+
+    .success {
+      display: block;
+      background: #edf8f1;
+      color: #28633f;
+    }
+
+    .small {
+      margin-top: 20px;
+      text-align: center;
+      color: #8a918d;
+      font-size: 12px;
+    }
+  </style>
 </head>
 
 <body>
-<div class="page">
-<div class="card">
 
-<div class="logo">🔧</div>
+  <div class="page">
 
-<h1>РММ Учёт</h1>
-<div class="subtitle">Вход в систему</div>
+    <div class="card">
 
-<form id="f">
-<label>Логин</label>
-<input id="u" autocomplete="username" required>
+      <div class="logo">🔧</div>
 
-<label>Пароль</label>
-<input id="p" type="password" autocomplete="current-password" required>
+      <h1>РММ Учёт</h1>
 
-<button id="b">Войти</button>
-</form>
+      <div class="subtitle">
+        Вход в систему
+      </div>
 
-<div id="m" class="msg"></div>
+      <form id="loginForm">
 
-<div class="small">РММ Учёт • защищённый доступ</div>
+        <label for="username">
+          Логин
+        </label>
 
-</div>
-</div>
+        <input
+          id="username"
+          type="text"
+          autocomplete="username"
+          autocapitalize="none"
+          spellcheck="false"
+          required
+        >
 
-<script>
-const f=document.getElementById('f'),
-      m=document.getElementById('m'),
-      b=document.getElementById('b');
+        <label for="password">
+          Пароль
+        </label>
 
-f.onsubmit=async e=>{
-    e.preventDefault();
+        <input
+          id="password"
+          type="password"
+          autocomplete="current-password"
+          required
+        >
 
-    m.className='msg';
-    b.disabled=true;
-    b.textContent='Вход…';
+        <button
+          id="loginButton"
+          type="submit"
+        >
+          Войти
+        </button>
 
-    try{
-        const r=await fetch('/api/login',{
-            method:'POST',
-            credentials:'include',
-            headers:{
-                'content-type':'application/json'
-            },
-            body:JSON.stringify({
-                username:document.getElementById('u').value.trim(),
-                password:document.getElementById('p').value
-            })
-        });
+      </form>
 
-        let d={};
+      <div
+        id="message"
+        class="message"
+      ></div>
 
-        try{
-            d=await r.json();
-        }catch(_){}
+      <div class="small">
+        РММ Учёт • защищённый доступ
+      </div>
 
-        if(r.ok){
-            location.href='/app';
-            return;
+    </div>
+
+  </div>
+
+  <script>
+    const form =
+      document.getElementById("loginForm");
+
+    const username =
+      document.getElementById("username");
+
+    const password =
+      document.getElementById("password");
+
+    const button =
+      document.getElementById("loginButton");
+
+    const message =
+      document.getElementById("message");
+
+
+    function showMessage(text, type) {
+      message.textContent = text;
+      message.className =
+        "message " + type;
+    }
+
+
+    async function checkExistingSession() {
+      try {
+        const response =
+          await fetch("/api/me", {
+            method: "GET",
+            credentials: "include",
+            cache: "no-store"
+          });
+
+        if (response.ok) {
+          window.location.replace(
+            "/app.html"
+          );
+        }
+      } catch (_) {
+      }
+    }
+
+
+    form.addEventListener(
+      "submit",
+      async function(event) {
+
+        event.preventDefault();
+
+        message.className = "message";
+        message.textContent = "";
+
+        const login =
+          username.value.trim();
+
+        const pass =
+          password.value;
+
+        if (!login || !pass) {
+          showMessage(
+            "Введи логин и пароль.",
+            "error"
+          );
+          return;
         }
 
-        m.textContent=d.error==='bad_login'
-            ? 'Неверный логин или пароль.'
-            : 'Ошибка входа: '+(d.error||r.status);
+        button.disabled = true;
+        button.textContent = "Вход...";
 
-        m.className='msg error';
+        try {
 
-    }catch(_){
-        m.textContent='Нет связи с сервером.';
-        m.className='msg error';
+          const response =
+            await fetch(
+              "/api/login",
+              {
+                method: "POST",
 
-    }finally{
-        b.disabled=false;
-        b.textContent='Войти';
-    }
-};
-</script>
+                credentials: "include",
+
+                cache: "no-store",
+
+                headers: {
+                  "Content-Type":
+                    "application/json"
+                },
+
+                body: JSON.stringify({
+                  username: login,
+                  password: pass
+                })
+              }
+            );
+
+
+          let data = {};
+
+          try {
+            data =
+              await response.json();
+          } catch (_) {
+          }
+
+
+          if (response.ok) {
+
+            showMessage(
+              "Вход выполнен.",
+              "success"
+            );
+
+            /*
+              ВАЖНО:
+              приложение реально находится
+              в public/app.html.
+
+              Поэтому переходим именно
+              на /app.html, а не /app.
+            */
+
+            window.location.replace(
+              "/app.html"
+            );
+
+            return;
+          }
+
+
+          if (
+            response.status === 401 ||
+            data.error === "bad_login"
+          ) {
+
+            showMessage(
+              "Неверный логин или пароль.",
+              "error"
+            );
+
+            return;
+          }
+
+
+          showMessage(
+            "Ошибка входа: " +
+              (
+                data.message ||
+                data.error ||
+                ("HTTP " + response.status)
+              ),
+            "error"
+          );
+
+        } catch (error) {
+
+          showMessage(
+            "Нет связи с сервером.",
+            "error"
+          );
+
+        } finally {
+
+          button.disabled = false;
+          button.textContent = "Войти";
+
+        }
+      }
+    );
+
+
+    checkExistingSession();
+  </script>
 
 </body>
 </html>
