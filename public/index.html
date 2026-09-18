@@ -9,9 +9,7 @@
   <title>РММ Учёт</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -106,9 +104,7 @@
       cursor: pointer;
     }
 
-    button:disabled {
-      opacity: .55;
-    }
+    button:disabled { opacity: .55; }
 
     .secondary {
       background: #eef2f0;
@@ -123,6 +119,7 @@
       border-radius: 13px;
       font-size: 14px;
       line-height: 1.4;
+      word-break: break-word;
     }
 
     .error {
@@ -144,23 +141,17 @@
       font-size: 12px;
     }
 
-    #loginPanel {
-      display: none;
-    }
+    #loginPanel { display: none; }
   </style>
 </head>
 
 <body>
 
 <div class="page">
-
   <div class="card">
 
     <div class="logo">🔧</div>
-
     <h1>РММ Учёт</h1>
-
-    <!-- ПЕРВЫЙ ЗАПУСК -->
 
     <div id="setupPanel">
 
@@ -175,16 +166,14 @@
       <form id="setupForm">
 
         <label for="setupUsername">Логин администратора</label>
-
         <input
           id="setupUsername"
           autocomplete="username"
-          placeholder="Например: admin"
+          placeholder="Например: Maksim"
           required
         >
 
         <label for="setupPassword">Пароль</label>
-
         <input
           id="setupPassword"
           type="password"
@@ -195,7 +184,6 @@
         >
 
         <label for="setupPassword2">Повтори пароль</label>
-
         <input
           id="setupPassword2"
           type="password"
@@ -223,9 +211,6 @@
 
     </div>
 
-
-    <!-- ВХОД -->
-
     <div id="loginPanel">
 
       <div class="subtitle">
@@ -235,7 +220,6 @@
       <form id="loginForm">
 
         <label for="loginUsername">Логин</label>
-
         <input
           id="loginUsername"
           autocomplete="username"
@@ -244,7 +228,6 @@
         >
 
         <label for="loginPassword">Пароль</label>
-
         <input
           id="loginPassword"
           type="password"
@@ -276,51 +259,34 @@
     </div>
 
   </div>
-
 </div>
 
-
 <script>
-
 const setupPanel = document.getElementById("setupPanel");
 const loginPanel = document.getElementById("loginPanel");
-
 const setupMessage = document.getElementById("setupMessage");
 const loginMessage = document.getElementById("loginMessage");
 
-
 function showLogin() {
-
   setupPanel.style.display = "none";
   loginPanel.style.display = "block";
-
   setupMessage.className = "message";
   setupMessage.textContent = "";
-
 }
-
 
 function showSetup() {
-
   loginPanel.style.display = "none";
   setupPanel.style.display = "block";
-
   loginMessage.className = "message";
   loginMessage.textContent = "";
-
 }
-
 
 function message(element, text, type) {
-
   element.textContent = text;
   element.className = "message " + type;
-
 }
 
-
 async function api(path, options = {}) {
-
   const response = await fetch(path, {
     credentials: "include",
     ...options,
@@ -336,17 +302,10 @@ async function api(path, options = {}) {
     data = await response.json();
   } catch (_) {}
 
-  return {
-    response,
-    data
-  };
-
+  return { response, data };
 }
 
-
-/* =========================
-   СОЗДАНИЕ ПЕРВОГО ADMIN
-========================= */
+/* СОЗДАНИЕ ПЕРВОГО АДМИНИСТРАТОРА */
 
 document
   .getElementById("setupForm")
@@ -366,61 +325,45 @@ document
     const button =
       document.getElementById("setupButton");
 
-
     if (username.length < 3) {
-
       message(
         setupMessage,
         "Логин должен содержать минимум 3 символа.",
         "error"
       );
-
       return;
     }
 
-
     if (password.length < 12) {
-
       message(
         setupMessage,
         "Пароль должен содержать минимум 12 символов.",
         "error"
       );
-
       return;
     }
 
-
     if (password !== password2) {
-
       message(
         setupMessage,
         "Пароли не совпадают.",
         "error"
       );
-
       return;
     }
-
 
     button.disabled = true;
     button.textContent = "Создание...";
 
-
     try {
 
-      const { response, data } =
-        await api("/api/setup", {
-
-          method: "POST",
-
-          body: JSON.stringify({
-            username,
-            password
-          })
-
-        });
-
+      const { response, data } = await api("/api/setup", {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          password
+        })
+      });
 
       if (response.ok) {
 
@@ -434,32 +377,23 @@ document
           username;
 
         setTimeout(() => {
-
           showLogin();
-
-          document
-            .getElementById("loginPassword")
-            .focus();
-
-        }, 800);
+          document.getElementById("loginPassword").focus();
+        }, 700);
 
         return;
       }
 
-
       const error =
-        data.error ||
+        data.details ||
         data.message ||
-        "";
-
+        data.error ||
+        ("HTTP " + response.status);
 
       if (
         response.status === 409 ||
-        error === "setup_done" ||
-        error === "already_initialized" ||
-        error === "admin_exists"
+        data.error === "setup_done"
       ) {
-
         showLogin();
 
         message(
@@ -471,37 +405,30 @@ document
         return;
       }
 
-
       message(
         setupMessage,
-        "Сервер отклонил создание администратора: " +
-        (error || ("HTTP " + response.status)),
+        "Ошибка сервера: " + error,
         "error"
       );
-
 
     } catch (error) {
 
       message(
         setupMessage,
-        "Нет связи с сервером.",
+        "Нет связи с сервером: " +
+          String(error?.message || error),
         "error"
       );
 
     } finally {
 
       button.disabled = false;
-      button.textContent =
-        "Создать администратора";
+      button.textContent = "Создать администратора";
 
     }
-
   });
 
-
-/* =========================
-   ВХОД
-========================= */
+/* ВХОД */
 
 document
   .getElementById("loginForm")
@@ -518,25 +445,18 @@ document
     const button =
       document.getElementById("loginButton");
 
-
     button.disabled = true;
     button.textContent = "Вход...";
 
-
     try {
 
-      const { response, data } =
-        await api("/api/login", {
-
-          method: "POST",
-
-          body: JSON.stringify({
-            username,
-            password
-          })
-
-        });
-
+      const { response, data } = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          password
+        })
+      });
 
       if (response.ok) {
 
@@ -546,38 +466,33 @@ document
           "success"
         );
 
-
-        /*
-          После входа пробуем перейти
-          в основное приложение.
-        */
-
         const destination =
           data.redirect ||
           data.url ||
           "/app";
 
-
         window.location.href = destination;
-
         return;
       }
 
+      const error =
+        data.details ||
+        data.message ||
+        data.error ||
+        ("HTTP " + response.status);
 
       message(
         loginMessage,
-        data.error ||
-        data.message ||
-        "Неверный логин или пароль.",
+        "Ошибка входа: " + error,
         "error"
       );
-
 
     } catch (error) {
 
       message(
         loginMessage,
-        "Нет связи с сервером.",
+        "Нет связи с сервером: " +
+          String(error?.message || error),
         "error"
       );
 
@@ -587,9 +502,7 @@ document
       button.textContent = "Войти";
 
     }
-
   });
-
 </script>
 
 </body>
