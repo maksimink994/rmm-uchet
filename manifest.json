@@ -1,0 +1,10 @@
+{
+  "name": "РММ Учёт",
+  "short_name": "РММ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7f6",
+  "theme_color": "#f5f7f6",
+  "lang": "ru",
+  "description": "Учёт сотрудников и ремонтных работ РММ"
+}
