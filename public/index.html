@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f7f6">
+  <title>РММ Учёт</title>
+  <link rel="manifest" href="/manifest.json">
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f7f6;
+      color: #202522;
+    }
+
+    .app {
+      max-width: 720px;
+      margin: auto;
+      min-height: 100vh;
+      padding-bottom: 90px;
+    }
+
+    header {
+      background: white;
+      padding: 20px 18px 16px;
+      border-bottom: 1px solid #e5e9e7;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 25px;
+    }
+
+    .date {
+      margin-top: 5px;
+      color: #6d756f;
+      font-size: 14px;
+    }
+
+    .content {
+      padding: 14px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .stat {
+      background: white;
+      border-radius: 16px;
+      padding: 14px;
+      border: 1px solid #e6eae8;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 24px;
+    }
+
+    .stat span {
+      color: #69716c;
+      font-size: 13px;
+    }
+
+    .search {
+      width: 100%;
+      padding: 13px 15px;
+      border: 1px solid #dfe4e1;
+      border-radius: 14px;
+      background: white;
+      font-size: 16px;
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e5e9e7;
+      border-radius: 17px;
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    .employee {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .marker {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #c7ccc9;
+      flex-shrink: 0;
+    }
+
+    .marker.green {
+      background: #39a867;
+    }
+
+    .marker.yellow {
+      background: #e4b83f;
+    }
+
+    .name {
+      font-weight: 700;
+      font-size: 16px;
+    }
+
+    .role {
+      color: #737a76;
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 50px 20px;
+      color: #747c77;
+    }
+
+    .bottom {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: white;
+      border-top: 1px solid #dfe4e1;
+      display: flex;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    .bottom-inner {
+      width: 100%;
+      max-width: 720px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .nav {
+      padding: 13px 4px 12px;
+      text-align: center;
+      font-size: 12px;
+      color: #747b77;
+    }
+
+    .nav.active {
+      color: #177748;
+      font-weight: 700;
+    }
+
+    button {
+      border: 0;
+      border-radius: 13px;
+      padding: 12px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: #177748;
+      color: white;
+    }
+
+    .login {
+      padding: 30px 18px;
+    }
+
+    .login-box {
+      max-width: 420px;
+      margin: 70px auto 0;
+      background: white;
+      padding: 24px;
+      border-radius: 20px;
+      border: 1px solid #e4e8e6;
+    }
+
+    .login-box h2 {
+      margin-top: 0;
+    }
+
+    .login-box input {
+      width: 100%;
+      padding: 13px;
+      margin-bottom: 10px;
+      border-radius: 12px;
+      border: 1px solid #d8dedb;
+      font-size: 16px;
+    }
+
+    .login-box button {
+      width: 100%;
+    }
+
+    .error {
+      color: #b42318;
+      font-size: 14px;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="root">
+  <div class="login">
+    <div class="login-box">
+      <h2>РММ Учёт</h2>
+      <p>Вход в систему</p>
+
+      <input id="username" placeholder="Логин" autocomplete="username">
+      <input id="password" type="password" placeholder="Пароль" autocomplete="current-password">
+
+      <button class="primary" onclick="login()">Войти</button>
+
+      <div id="error" class="error"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentState = null;
+let revision = 0;
+let csrf = "";
+
+async function api(url, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  };
+
+  if (csrf) {
+    headers["X-CSRF-Token"] = csrf;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: "same-origin"
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.error || "Ошибка");
+  }
+
+  return data;
+}
+
+async function login() {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  const error = document.getElementById("error");
+
+  error.textContent = "";
+
+  try {
+    const result = await api("/api/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password })
+    });
+
+    csrf = result.csrf;
+
+    await loadApp();
+  } catch (e) {
+    error.textContent = "Неверный логин или пароль";
+  }
+}
+
+async function loadApp() {
+  try {
+    const me = await api("/api/me");
+    csrf = me.csrf;
+
+    const state = await api("/api/state");
+
+    revision = state.revision || 0;
+    currentState = state.data || {
+      employees: [],
+      assignments: [],
+      workTypes: []
+    };
+
+    render();
+  } catch (e) {
+    showLogin();
+  }
+}
+
+function showLogin() {
+  document.getElementById("root").innerHTML = `
+    <div class="login">
+      <div class="login-box">
+        <h2>РММ Учёт</h2>
+        <p>Вход в систему</p>
+
+        <input id="username" placeholder="Логин" autocomplete="username">
+        <input id="password" type="password" placeholder="Пароль" autocomplete="current-password">
+
+        <button class="primary" onclick="login()">Войти</button>
+
+        <div id="error" class="error"></div>
+      </div>
+    </div>
+  `;
+}
+
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${day}`;
+}
+
+function dateText() {
+  return new Intl.DateTimeFormat("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long"
+  }).format(new Date());
+}
+
+function render() {
+  const employees = currentState.employees || [];
+  const assignments = currentState.assignments || [];
+  const today = todayISO();
+
+  const todayAssignments = assignments.filter(x => x.date === today);
+
+  const assignedIds = new Set(
+    todayAssignments
+      .filter(x => x.garage)
+      .map(x => String(x.employeeId))
+  );
+
+  const working = employees.filter(
+    x => !["Больничный", "Отпуск", "Межвахта"].includes(x.status)
+  );
+
+  const absent = employees.length - working.length;
+
+  document.getElementById("root").innerHTML = `
+    <div class="app">
+      <header>
+        <h1>Сегодня</h1>
+        <div class="date">${dateText()}</div>
+      </header>
+
+      <main class="content">
+
+        <div class="stats">
+          <div class="stat">
+            <strong>${working.length}</strong>
+            <span>На работе</span>
+          </div>
+
+          <div class="stat">
+            <strong>${assignedIds.size}</strong>
+            <span>Назначено</span>
+          </div>
+
+          <div class="stat">
+            <strong>${Math.max(0, working.length - assignedIds.size)}</strong>
+            <span>Не назначены</span>
+          </div>
+
+          <div class="stat">
+            <strong>${absent}</strong>
+            <span>Отсутствуют</span>
+          </div>
+        </div>
+
+        <input
+          class="search"
+          id="search"
+          placeholder="Поиск сотрудника"
+          oninput="renderEmployees()"
+        >
+
+        <div id="employees"></div>
+      </main>
+    </div>
+
+    <nav class="bottom">
+      <div class="bottom-inner">
+        <div class="nav active">Сегодня</div>
+        <div class="nav">Сотрудники</div>
+        <div class="nav">Пятнашка</div>
+        <div class="nav">Ещё</div>
+      </div>
+    </nav>
+  `;
+
+  renderEmployees();
+}
+
+function renderEmployees() {
+  const box = document.getElementById("employees");
+
+  if (!box) return;
+
+  const q = (document.getElementById("search")?.value || "")
+    .trim()
+    .toLowerCase();
+
+  const employees = (currentState.employees || []).filter(x =>
+    (x.name || "").toLowerCase().includes(q)
+  );
+
+  if (!employees.length) {
+    box.innerHTML = `
+      <div class="empty">
+        Сотрудников пока нет
+      </div>
+    `;
+    return;
+  }
+
+  box.innerHTML = employees.map(emp => {
+    const status = emp.status || "На работе";
+
+    const assignment = (currentState.assignments || [])
+      .find(x =>
+        String(x.employeeId) === String(emp.id) &&
+        x.date === todayISO()
+      );
+
+    let marker = "";
+
+    if (status === "На работе") {
+      marker = assignment?.garage ? "green" : "yellow";
+    }
+
+    return `
+      <div class="card">
+        <div class="employee">
+          <div class="marker ${marker}"></div>
+
+          <div>
+            <div class="name">${escapeHtml(emp.name || "Без имени")}</div>
+            <div class="role">
+              ${escapeHtml(emp.specialty || "")}
+              ${assignment?.garage
+                ? " · гаражный " + escapeHtml(String(assignment.garage))
+                : ""}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+loadApp();
+</script>
+
+</body>
+</html>
